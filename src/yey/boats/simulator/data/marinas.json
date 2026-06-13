@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Venice (Porto Lido)", "lat": 45.4317, "lon": 12.3405,
+    "marina": "ACI Venezia", "berth_heading": 270,
+    "refill_water": true, "refill_fuel": false, "pump_out_bw": true
+  },
+  {
+    "name": "Pula", "lat": 44.8625, "lon": 13.8499,
+    "marina": "ACI Marina Pula", "berth_heading": 180,
+    "refill_water": true, "refill_fuel": true, "pump_out_bw": true
+  },
+  {
+    "name": "Zadar", "lat": 44.1194, "lon": 15.2314,
+    "marina": "ACI Marina Zadar", "berth_heading": 90,
+    "refill_water": true, "refill_fuel": false, "pump_out_bw": true
+  },
+  {
+    "name": "Split", "lat": 43.5066, "lon": 16.4308,
+    "marina": "ACI Marina Split", "berth_heading": 270,
+    "refill_water": true, "refill_fuel": true, "pump_out_bw": true
+  },
+  {
+    "name": "Hvar", "lat": 43.1723, "lon": 16.4414,
+    "marina": "ACI Marina Hvar", "berth_heading": 180,
+    "refill_water": true, "refill_fuel": false, "pump_out_bw": true
+  },
+  {
+    "name": "Korčula", "lat": 42.9600, "lon": 17.1386,
+    "marina": "ACI Marina Korčula", "berth_heading": 90,
+    "refill_water": true, "refill_fuel": true, "pump_out_bw": true
+  },
+  {
+    "name": "Dubrovnik", "lat": 42.6531, "lon": 18.0735,
+    "marina": "ACI Marina Dubrovnik", "berth_heading": 315,
+    "refill_water": true, "refill_fuel": false, "pump_out_bw": true
+  },
+  {
+    "name": "Corfu", "lat": 39.6243, "lon": 19.9217,
+    "marina": "Mandraki Marina", "berth_heading": 0,
+    "refill_water": true, "refill_fuel": true, "pump_out_bw": true
+  }
+]
