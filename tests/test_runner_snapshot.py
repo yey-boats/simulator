@@ -5,9 +5,18 @@ from yey.boats.simulator.engine.schedule import SimState  # type: ignore[import]
 from yey.boats.simulator.engine.runner import build_snapshot  # type: ignore[import]
 
 
-class _Elec: soc = 0.8; solar_w = 100.0
-class _Sys: fw_tank_0 = 0.4; bw_tank_0 = 0.2
-class _Wx: pass
+class _Elec:
+    soc = 0.8
+    solar_w = 100.0
+
+
+class _Sys:
+    fw_tank_0 = 0.4
+    bw_tank_0 = 0.2
+
+
+class _Wx:
+    pass
 
 
 def test_build_snapshot_populates_fields():
