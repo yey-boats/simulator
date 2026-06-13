@@ -36,3 +36,6 @@ testpaths = ["tests"]
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]  # assert is idiomatic in pytest tests
