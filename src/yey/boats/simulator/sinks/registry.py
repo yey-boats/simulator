@@ -36,7 +36,7 @@ def build_sink_chain(settings: Settings) -> SinkChain:
         chain.append(
             SignalKSink(
                 "localhost",
-                3000,
+                settings.signalk_port,
                 settings.signalk_username,
                 settings.signalk_password,
             )
