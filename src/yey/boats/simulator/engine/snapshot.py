@@ -25,3 +25,4 @@ class TelemetrySnapshot:
     point_index: int
     polars: Any = None
     autopilot: Any = None
+    distance_to_next_nm: float = 0.0
