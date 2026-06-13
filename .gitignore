@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+.ruff_cache/
+# runtime-generated GEBCO depth cache (DATA_DIR), never the bundled package data
+/run-data/
