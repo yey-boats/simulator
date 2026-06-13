@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 import math
+import sys
 import zipfile
 import pathlib
 from dataclasses import dataclass, field
@@ -138,11 +139,24 @@ class Route:
 
     def load_depth_profile(self, cache_path: pathlib.Path,
                            samples_per_leg: int = 8) -> None:
-        """Load depth profile from cache, or fetch from OpenTopoData and save."""
+        """Load depth profile from cache, or fetch from OpenTopoData and save.
+
+        On a fetch/parse failure (e.g. offline or rate-limited first boot) the
+        profile degrades to empty — depth_at() then returns a 50 m default —
+        instead of crashing the simulator. No cache is written on failure, so a
+        later run with connectivity can still populate it.
+        """
         if cache_path.exists():
             self._depth_profile = json.loads(cache_path.read_text())
             return
-        self._depth_profile = _fetch_depth_profile(self.waypoints, samples_per_leg)
+        try:
+            self._depth_profile = _fetch_depth_profile(self.waypoints, samples_per_leg)
+        except Exception as exc:  # noqa: BLE001
+            msg = (f"[route] depth profile fetch failed ({exc!r}); "
+                   f"using default depth (50 m)")
+            print(msg, file=sys.stderr, flush=True)  # noqa: T201
+            self._depth_profile = []
+            return
         cache_path.write_text(json.dumps(self._depth_profile, indent=2))
 
     def depth_at(self, lat: float, lon: float) -> float:

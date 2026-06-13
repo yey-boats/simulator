@@ -34,3 +34,22 @@ async def test_chain_raises_if_all_fail():
     chain = SinkChain([FlakyOpen(), FlakyOpen()])
     with pytest.raises(RuntimeError):
         await chain.open()
+
+
+class FlakyPublish:
+    name = "flaky-pub"
+    def __init__(self): self.opened = False
+    async def open(self): self.opened = True
+    async def publish(self, snap): raise ConnectionError("publish boom")
+    async def close(self): ...
+
+
+@pytest.mark.asyncio
+async def test_chain_demotes_on_publish_failure():
+    good = Good()
+    chain = SinkChain([FlakyPublish(), good])
+    await chain.open()                 # FlakyPublish opens fine, becomes active
+    assert chain.active.name == "flaky-pub"  # noqa: S101
+    await chain.publish("snap")        # FlakyPublish.publish raises -> demote to good, re-publish
+    assert chain.active.name == "good"       # noqa: S101
+    assert good.published == ["snap"]        # noqa: S101

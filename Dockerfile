@@ -14,6 +14,7 @@ COPY --from=build /dist/*.whl /tmp/
 RUN pip install --no-cache-dir /tmp/*.whl && rm -f /tmp/*.whl
 USER sim
 VOLUME ["/data"]
-# Pre-warm the GEBCO depth cache at build time so the board doesn't pay the
-# ~30s first-run fetch (cache lands in DATA_DIR=/data; mount a volume to persist).
+# The GEBCO depth cache is built lazily on first run into DATA_DIR=/data (mount a
+# volume to persist it). If the first run is offline the sim degrades to a default
+# depth and retries caching on a later run.
 ENTRYPOINT ["yey-boats-sim"]
