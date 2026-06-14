@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, Protocol, runtime_checkable
 
-from yey.boats.simulator.engine.snapshot import TelemetrySnapshot  # type: ignore[import]
+from yey.boats.simulator.engine.snapshot import AisContact, TelemetrySnapshot  # type: ignore[import]
 
 
 @runtime_checkable
@@ -35,4 +35,13 @@ class CommandSource(Protocol):
 
 @runtime_checkable
 class DataSource(Protocol):
-    async def get_weather(self, lat: float, lon: float, when: Any) -> Any: ...
+    async def get_weather(self, lat: float, lon: float, now: Any) -> Any: ...
+    async def twd_shift_next_6h(self, lat: float, lon: float, now: Any) -> float: ...
+    async def mean_tws_next_6h(self, lat: float, lon: float, now: Any) -> float: ...
+
+
+@runtime_checkable
+class AISSource(Protocol):
+    async def start(self) -> None: ...
+
+    def get_contacts(self, lat: float, lon: float) -> list[AisContact]: ...
