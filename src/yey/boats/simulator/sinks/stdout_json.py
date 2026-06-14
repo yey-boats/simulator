@@ -39,6 +39,7 @@ class StdoutJsonSink:
             "bw0": round(sys_.bw_tank_0, 3),
             "wp_next": snapshot.next_wp[0] if snapshot.next_wp else None,
             "dist_nm": round(snapshot.distance_to_next_nm, 1),
+            "ais": len(snapshot.ais_contacts),
         }
         sys.stdout.write(json.dumps(rec) + "\n")
         sys.stdout.flush()

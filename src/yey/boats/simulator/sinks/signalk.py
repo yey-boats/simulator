@@ -24,6 +24,7 @@ class SignalKSink:
         self._username = username
         self._password = password
         self.writer = writer if writer is not None else SignalKWriter(host, port)
+        self._last_point_index: int | None = None
 
     async def open(self) -> None:
         await self.writer.connect(self._username, self._password)
@@ -35,6 +36,16 @@ class SignalKSink:
             next_wp=snapshot.next_wp, route_href=snapshot.route_href,
             point_index=snapshot.point_index, polars=snapshot.polars,
             autopilot=snapshot.autopilot)
+        for c in snapshot.ais_contacts:
+            await self.writer.enqueue_ais(c.mmsi, c.lat, c.lon, c.cog_deg,
+                                          c.sog_kts, c.name, c.ship_type)
+        if self._last_point_index is not None and snapshot.point_index != self._last_point_index:
+            steps = snapshot.point_index - self._last_point_index
+            try:
+                await self.writer.advance_active_point(steps if steps > 0 else 1)
+            except Exception:  # noqa: BLE001,S110
+                pass
+        self._last_point_index = snapshot.point_index
 
     async def close(self) -> None:
         await self.writer.close()
