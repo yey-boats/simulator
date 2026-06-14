@@ -23,6 +23,7 @@ class Settings:
     signalk_password: str = "admin"  # noqa: S105
     aisstream_api_key: str = ""
     sink: str = "signalk"          # one of: signalk, stdout, nmea0183, nmea2000
+    weather_source: str = "openmeteo"  # openmeteo | signalk
     failover: bool = True
     data_dir: Path = field(default_factory=lambda: _DEFAULT_DATA_DIR)
 
@@ -35,6 +36,7 @@ class Settings:
             signalk_password=_env("SIGNALK_PASSWORD", "admin"),
             aisstream_api_key=_env("AISSTREAM_API_KEY", "").strip(),
             sink=_env("SINK", "signalk"),
+            weather_source=_env("WEATHER_SOURCE", "openmeteo"),
             failover=_env("SINK_FAILOVER", "1") not in ("0", "false", "False"),
             data_dir=Path(_env("DATA_DIR", "./run-data")).resolve(),
         )
