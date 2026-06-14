@@ -16,6 +16,8 @@ def build_settings(argv: list[str] | None = None) -> Settings:
     p.add_argument("--signalk-port", type=int, default=None)
     p.add_argument("--signalk-username", default=None)
     p.add_argument("--signalk-password", default=None)
+    p.add_argument("--weather-source", choices=["openmeteo", "signalk"], default=None,
+                   help="where weather comes from (default: env WEATHER_SOURCE or openmeteo)")
     p.add_argument("--data-dir", default=None, help="writable dir for the depth cache")
     p.add_argument("--no-failover", action="store_true", help="disable sink failover chain")
     args = p.parse_args(argv)
@@ -25,6 +27,7 @@ def build_settings(argv: list[str] | None = None) -> Settings:
         "signalk_port": args.signalk_port,
         "signalk_username": args.signalk_username,
         "signalk_password": args.signalk_password,
+        "weather_source": args.weather_source,
     }
     if args.data_dir is not None:
         from pathlib import Path

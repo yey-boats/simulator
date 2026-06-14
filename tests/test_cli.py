@@ -15,3 +15,15 @@ def test_cli_defaults_to_env(monkeypatch):
     s = build_settings([])
     assert s.sink == "stdout"  # noqa: S101
     assert s.signalk_port == 3005  # noqa: S101
+
+
+def test_cli_weather_source_flag_overrides_env(monkeypatch):
+    monkeypatch.setenv("WEATHER_SOURCE", "openmeteo")
+    s = build_settings(["--weather-source", "signalk"])
+    assert s.weather_source == "signalk"  # noqa: S101
+
+
+def test_cli_weather_source_defaults_to_env(monkeypatch):
+    monkeypatch.setenv("WEATHER_SOURCE", "signalk")
+    s = build_settings([])
+    assert s.weather_source == "signalk"  # noqa: S101
