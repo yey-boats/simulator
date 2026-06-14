@@ -5,9 +5,20 @@ format. Fields mirror the arguments SignalKWriter.send_vessel_delta needs.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
+
+
+@dataclass
+class AisContact:
+    mmsi: str
+    lat: float
+    lon: float
+    cog_deg: float
+    sog_kts: float
+    name: str
+    ship_type: int
 
 
 @dataclass
@@ -26,3 +37,4 @@ class TelemetrySnapshot:
     polars: Any = None
     autopilot: Any = None
     distance_to_next_nm: float = 0.0
+    ais_contacts: list[AisContact] = field(default_factory=list)
