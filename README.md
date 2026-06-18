@@ -41,6 +41,9 @@ sink. The default failover chain demotes SignalK -> SignalK@localhost -> stdout.
 
 ## License
 
+© 2026 Yey Boats Project. All rights reserved except as expressly licensed (see
+[`NOTICE`](NOTICE)).
+
 Source-available under the **PolyForm Noncommercial License 1.0.0** (see
 [`LICENSE`](LICENSE)). You may use, modify, and share it for **any noncommercial
 purpose** — hobby, personal, research, education, and evaluation — at no cost.

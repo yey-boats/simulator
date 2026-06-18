@@ -1,5 +1,9 @@
 # Commercial licensing
 
+© 2026 Yey Boats Project. All rights reserved except as expressly licensed. The
+source code, documentation, designs, and related materials are owned or
+controlled by the project owner or its licensors.
+
 `yey-boats-simulator` is free to use, modify, and share for **noncommercial
 purposes** under the [PolyForm Noncommercial License 1.0.0](LICENSE).
 
@@ -15,9 +19,9 @@ OEM/redistribution, support terms).
 
 ## How to obtain one
 
-Contact the maintainer with your intended use, scale, and distribution model:
+Contact the project owner with your intended use, scale, and distribution model:
 
-- **Email:** boris@nestlogic.com
+- **Email:** rights@yey.boats
 - Or open a licensing inquiry referencing this repository.
 
 Please do not file public issues for licensing terms; email is preferred.
