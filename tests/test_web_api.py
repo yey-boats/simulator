@@ -79,7 +79,10 @@ async def test_status(aiohttp_client, tmp_path):
     cli = await aiohttp_client(make_app(ctl, token=None))
     r = await cli.get("/api/status")
     assert r.status == 200
-    assert "position" in await r.json()
+    body = await r.json()
+    assert "position" in body
+    assert "connected" in body
+    assert "tick" in body
 
 
 async def test_token_required_when_set(aiohttp_client, tmp_path):

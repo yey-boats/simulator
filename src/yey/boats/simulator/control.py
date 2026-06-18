@@ -23,6 +23,8 @@ class SimController:
         self._last_pos: Optional[tuple[float, float]] = None
         self._restart = asyncio.Event()
         self._last_error: Optional[str] = None
+        self._tick = 0
+        self._connected = False
 
     # --- introspection ---------------------------------------------------
     @property
@@ -38,15 +40,19 @@ class SimController:
                if self._last_pos else None)
         return {
             "running": self._task is not None and not self._task.done(),
+            "connected": self._connected,
             "sink": self._settings.sink,
             "weather_source": self._settings.weather_source,
             "signalk": f"{self._settings.signalk_host}:{self._settings.signalk_port}",
             "position": pos,
+            "tick": self._tick,
             "last_error": self._last_error,
         }
 
-    def _report_pos(self, pos: tuple[float, float]) -> None:
+    def _report_status(self, pos: tuple[float, float], connected: bool) -> None:
         self._last_pos = pos
+        self._connected = connected
+        self._tick += 1
 
     # --- supervisor loop -------------------------------------------------
     async def run_forever(self) -> None:
@@ -71,7 +77,7 @@ class SimController:
 
     async def _run_once(self) -> None:
         await self._pipeline(self._settings, self._route,
-                             self._last_pos, self._report_pos)
+                             self._last_pos, self._report_status)
 
     # --- live-apply ------------------------------------------------------
     async def apply_config(self, changes: dict[str, Any]) -> None:

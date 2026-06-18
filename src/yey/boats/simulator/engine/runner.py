@@ -51,14 +51,16 @@ def _route_to_geojson(route: Route) -> dict:
     }
 
 
-async def pipeline(settings: Settings, route, start_pos, report_pos) -> None:
+async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
     """Single run of the engine pipeline.
 
     Args:
         settings: Current Settings snapshot.
         route: Pre-loaded Route, or None to load from resources.
         start_pos: (lat, lon) tuple to resume from, or None to use SignalK/origin.
-        report_pos: Callable[(lat, lon)] called after each engine tick.
+        report_status: Callable[((lat, lon), connected: bool)] called after each
+            engine tick. `connected` is True when the SignalK sink is the active
+            chain member (i.e. not failed over).
     """
     if route is None:
         route = Route.load(resources.route_kmz(), resources.marinas_json())
@@ -127,7 +129,9 @@ async def pipeline(settings: Settings, route, start_pos, report_pos) -> None:
             now = datetime.now(timezone.utc)
             snap = await engine.tick(now)
             await chain.publish(snap)
-            report_pos((engine.nav_state.lat, engine.nav_state.lon))
+            # chain.active may change over the run (failover); recompute each tick.
+            connected = isinstance(chain.active, SignalKSink)
+            report_status((engine.nav_state.lat, engine.nav_state.lon), connected)
             await asyncio.sleep(max(0, 1.0 - (time.monotonic() - t0)))
 
     tasks = [drive(), ais_source.start()]

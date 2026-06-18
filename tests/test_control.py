@@ -10,9 +10,9 @@ async def test_apply_config_rebuilds_pipeline(tmp_path):
     runs = []           # (settings.signalk_host, start_pos)
     started = asyncio.Event()
 
-    async def fake_pipeline(settings, route, start_pos, report_pos):
+    async def fake_pipeline(settings, route, start_pos, report_status):
         runs.append((settings.signalk_host, start_pos))
-        report_pos((45.0, 13.0))   # controller records last position
+        report_status((45.0, 13.0), True)   # controller records last position
         started.set()
         await asyncio.sleep(3600)  # runs until cancelled
 
@@ -37,14 +37,16 @@ async def test_apply_config_rebuilds_pipeline(tmp_path):
 
 @pytest.mark.asyncio
 async def test_status_reports_position(tmp_path):
-    async def fake_pipeline(settings, route, start_pos, report_pos):
-        report_pos((1.0, 2.0))
+    async def fake_pipeline(settings, route, start_pos, report_status):
+        report_status((1.0, 2.0), True)
         await asyncio.sleep(3600)
     c = SimController(Settings(), route=None, data_dir=tmp_path, pipeline=fake_pipeline)
     task = asyncio.create_task(c.run_forever())
     await asyncio.sleep(0.05)
     st = c.status()
     assert st["position"] == {"lat": 1.0, "lon": 2.0}
+    assert st["connected"] is True
+    assert st["tick"] >= 1
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
