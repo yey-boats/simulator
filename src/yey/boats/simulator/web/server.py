@@ -32,11 +32,21 @@ def default_static_dir() -> Path:
     return Path(__file__).parent / "static"
 
 
+_NO_SPA_MSG = (
+    "Web UI assets not built. The JSON API works, but the SPA is missing — "
+    "run `npm --prefix frontend ci && npm --prefix frontend run build`, or use a "
+    "released wheel / the Docker image which bundle the built UI."
+)
+
+
 def make_full_app(controller, token, static_dir: Path) -> web.Application:
     app = make_app(controller, token=token)
+    index_file = static_dir / "index.html"
 
     async def index(request):
-        return web.FileResponse(static_dir / "index.html")
+        if not index_file.exists():        # static-less install (only .gitkeep)
+            return web.Response(text=_NO_SPA_MSG, status=503)
+        return web.FileResponse(index_file)
 
     # serve built assets, with SPA fallback to index.html for non-/api/ paths
     if (static_dir / "assets").exists():
@@ -46,7 +56,9 @@ def make_full_app(controller, token, static_dir: Path) -> web.Application:
     async def spa_fallback(request):
         if request.path.startswith("/api/"):
             return web.json_response({"error": "not found"}, status=404)
-        return web.FileResponse(static_dir / "index.html")
+        if not index_file.exists():
+            return web.Response(text=_NO_SPA_MSG, status=503)
+        return web.FileResponse(index_file)
 
     app.router.add_route("GET", "/{tail:.*}", spa_fallback)
     return app

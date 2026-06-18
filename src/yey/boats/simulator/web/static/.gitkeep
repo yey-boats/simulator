@@ -1,0 +1,3 @@
+# Keeps the web/static dir present on fresh checkouts so the hatch force-include
+# in pyproject.toml resolves. The real SPA is built here by 'npm run build' in
+# frontend/ (CI, Docker, and local dev). This placeholder is harmless in the wheel.

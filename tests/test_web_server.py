@@ -30,6 +30,19 @@ async def test_api_still_works_with_static(aiohttp_client, tmp_path):
     assert (await cli.get("/api/status")).status == 200
 
 
+async def test_missing_spa_serves_503_not_500(aiohttp_client, tmp_path):
+    # Static-less install (dir exists with only .gitkeep, no index.html): the
+    # API must still work and the SPA routes degrade to a clear 503, not a 500.
+    static = tmp_path / "static"
+    static.mkdir()  # no index.html
+    cli = await aiohttp_client(make_full_app(_ctl(tmp_path), token=None, static_dir=static))
+    root = await cli.get("/")
+    assert root.status == 503 and "not built" in (await root.text())
+    deep = await cli.get("/route")
+    assert deep.status == 503
+    assert (await cli.get("/api/status")).status == 200  # API unaffected
+
+
 async def test_token_allows_spa_blocks_api(aiohttp_client, tmp_path):
     static = tmp_path / "static"
     static.mkdir()

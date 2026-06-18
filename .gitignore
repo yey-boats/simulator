@@ -8,5 +8,9 @@ dist/
 .ruff_cache/
 # runtime-generated GEBCO depth cache (DATA_DIR), never the bundled package data
 /run-data/
-# built SPA (artifact — rebuilt from frontend/ by npm run build)
-src/yey/boats/simulator/web/static/
+# built SPA (artifact — rebuilt from frontend/ by npm run build). Ignore the
+# build output but keep the directory (via .gitkeep): hatch force-include in
+# pyproject.toml requires the dir to exist on a fresh checkout, including for
+# `pip install -e .` before the frontend has been built.
+src/yey/boats/simulator/web/static/*
+!src/yey/boats/simulator/web/static/.gitkeep

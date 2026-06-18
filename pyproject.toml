@@ -27,8 +27,12 @@ yey-boats-sim = "yey.boats.simulator.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/yey"]
 
-[tool.hatch.build.targets.wheel.force-include]
-"src/yey/boats/simulator/web/static" = "yey/boats/simulator/web/static"
+# The built SPA under web/static/ is VCS-ignored (it's a build artifact from
+# frontend/). `artifacts` re-includes it in the wheel without force-include —
+# which avoided "dir must exist on fresh checkout" AND the .gitkeep double-add
+# collision (force-include + normal packaging both adding the tracked file).
+[tool.hatch.build]
+artifacts = ["src/yey/boats/simulator/web/static/**"]
 
 
 [tool.pytest.ini_options]
