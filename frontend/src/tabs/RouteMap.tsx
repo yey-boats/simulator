@@ -91,7 +91,7 @@ export default function RouteMap({ waypoints, onChange }: Props) {
       <TileLayer
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-        // Dark-ish tile layer via Stamen/CartoDB fallback via OSM
+        // Plain OpenStreetMap raster tiles
       />
 
       {/* Route polyline */}

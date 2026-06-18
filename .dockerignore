@@ -10,3 +10,5 @@ build/
 frontend/node_modules/
 # static/ is rebuilt inside the node+python stages
 src/yey/boats/simulator/web/static/
+# TS incremental build cache should never enter the build context
+**/*.tsbuildinfo

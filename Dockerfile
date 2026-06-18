@@ -4,7 +4,7 @@
 FROM node:20-slim AS web
 WORKDIR /web
 COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm install
+RUN npm ci
 COPY frontend/ ./
 # Emit into /web/dist (not the default ../src/... which doesn't exist here)
 RUN VITE_OUT_DIR=/web/dist npm run build

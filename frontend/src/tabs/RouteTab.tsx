@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, Waypoint } from "../api";
 
-// Lazy-import RouteMap to avoid SSR issues with leaflet
 import RouteMap from "./RouteMap";
 
 /* ── Toast ── */
