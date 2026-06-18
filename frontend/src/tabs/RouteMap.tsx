@@ -82,6 +82,14 @@ export default function RouteMap({ waypoints, onChange }: Props) {
     ]);
   };
 
+  // Insert a waypoint into a leg at the clicked point: clicking the segment
+  // between waypoint `i` and `i+1` splices a new waypoint in at index `i+1`.
+  const handleInsert = (afterIndex: number, lat: number, lon: number) => {
+    const updated = [...waypoints];
+    updated.splice(afterIndex, 0, { name: `WP${waypoints.length + 1}`, lat, lon });
+    onChange(updated);
+  };
+
   return (
     <MapContainer
       center={center}
@@ -94,7 +102,7 @@ export default function RouteMap({ waypoints, onChange }: Props) {
         // Plain OpenStreetMap raster tiles
       />
 
-      {/* Route polyline */}
+      {/* Route polyline (visual) */}
       {positions.length > 1 && (
         <Polyline
           positions={positions}
@@ -103,9 +111,31 @@ export default function RouteMap({ waypoints, onChange }: Props) {
             weight: 2,
             opacity: 0.85,
             dashArray: "6 4",
+            interactive: false, // clicks go to the per-leg hit targets below
           }}
         />
       )}
+
+      {/* Per-leg transparent hit targets: click a leg to insert a waypoint at
+          that point (the thin dashed line above is too narrow to click). */}
+      {waypoints.slice(0, -1).map((_, i) => (
+        <Polyline
+          key={`leg-${i}-${waypoints[i].lat}-${waypoints[i + 1].lat}`}
+          positions={[
+            [waypoints[i].lat, waypoints[i].lon],
+            [waypoints[i + 1].lat, waypoints[i + 1].lon],
+          ]}
+          pathOptions={{ color: "#00d4ff", weight: 16, opacity: 0 }}
+          eventHandlers={{
+            click: (e) => {
+              // Leaflet path clicks otherwise also bubble to the map (which
+              // would append a waypoint); stop it so only the mid-leg insert runs.
+              L.DomEvent.stopPropagation(e);
+              handleInsert(i + 1, e.latlng.lat, e.latlng.lng);
+            },
+          }}
+        />
+      ))}
 
       {/* Waypoint markers */}
       {waypoints.map((wp, i) => (
