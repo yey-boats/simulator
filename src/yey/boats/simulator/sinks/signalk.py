@@ -45,12 +45,21 @@ class SignalKSink:
             dist_nm = haversine_nm(nav.lat, nav.lon, nearest.lat, nearest.lon)
             closest_approach = (bearing_rad, dist_nm * 1852)
 
+        # Convert modelled current fields to SI for the wire format:
+        # set: degrees → radians (direction water flows toward, true)
+        # drift: knots → m/s
+        current = (
+            math.radians(snapshot.current_set_deg),
+            snapshot.current_drift_kts * 0.514444,
+        )
+
         await self.writer.send_vessel_delta(
             snapshot.nav, snapshot.elec, snapshot.sys, snapshot.lights,
             snapshot.wx, snapshot.state, snapshot.utc_now, snapshot.temps,
             next_wp=snapshot.next_wp, route_href=snapshot.route_href,
             point_index=snapshot.point_index, polars=snapshot.polars,
-            autopilot=snapshot.autopilot, closest_approach=closest_approach)
+            autopilot=snapshot.autopilot, closest_approach=closest_approach,
+            current=current)
         for c in snapshot.ais_contacts:
             await self.writer.enqueue_ais(c.mmsi, c.lat, c.lon, c.cog_deg,
                                           c.sog_kts, c.name, c.ship_type)

@@ -20,6 +20,7 @@ from yey.boats.simulator.engine.schedule import Schedule, SimState  # type: igno
 from yey.boats.simulator.engine.snapshot import TelemetrySnapshot  # type: ignore[import]
 from yey.boats.simulator.engine.systems import Systems  # type: ignore[import]
 from yey.boats.simulator.engine.temperatures import ThermalModel  # type: ignore[import]
+from yey.boats.simulator.engine.current import tidal_current  # type: ignore[import]
 from yey.boats.simulator.engine.weather import DEFAULT_WEATHER  # type: ignore[import]
 
 ROUTE_UUID = "ad1a7c00-0b0a-4d1a-8c0a-000000000001"
@@ -132,6 +133,7 @@ class Engine:
         temps = self.thermal.cabin_temps(wx.temp_c, now)
 
         contacts = self._ais.get_contacts(self.nav_state.lat, self.nav_state.lon)
+        current_set_deg, current_drift_kts = tidal_current(now)
         nwp = self.route.next_wp
         snap = TelemetrySnapshot(
             nav=self.nav_state, elec=elec_state, sys=sys_state, lights=lights_state,
@@ -141,6 +143,8 @@ class Engine:
             point_index=self.route.current_index, polars=self.polars,
             autopilot=self.autopilot,
             distance_to_next_nm=self.route.distance_to_next(self.nav_state.lat, self.nav_state.lon),
-            ais_contacts=contacts)
+            ais_contacts=contacts,
+            current_set_deg=current_set_deg,
+            current_drift_kts=current_drift_kts)
         self.sched.tick(1.0)
         return snap

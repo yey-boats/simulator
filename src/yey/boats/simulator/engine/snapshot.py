@@ -38,3 +38,5 @@ class TelemetrySnapshot:
     autopilot: Any = None
     distance_to_next_nm: float = 0.0
     ais_contacts: list[AisContact] = field(default_factory=list)
+    current_set_deg: float = 0.0    # modelled current direction (degrees true, toward)
+    current_drift_kts: float = 0.0  # modelled current speed (knots)

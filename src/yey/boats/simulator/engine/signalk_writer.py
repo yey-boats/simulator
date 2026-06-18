@@ -449,7 +449,8 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
                          next_wp: tuple[str, float, float] | None = None,
                          route_href: str = "", point_index: int = 0,
                          polars: Any = None, autopilot: Any = None,
-                         closest_approach: tuple[float, float] | None = None) -> dict:
+                         closest_approach: tuple[float, float] | None = None,
+                         current: tuple[float, float] | None = None) -> dict:
     ts = _ts(utc_now)
     engine_on = state == SimState.MOTORED
     genset_on = elec.genset_state == "running"
@@ -599,6 +600,14 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
         values.append(_v("navigation.closestApproach.bearingTrue", bearing_rad))
         values.append(_v("navigation.closestApproach.distance",    dist_m))
 
+    # environment.current.* — modelled tidal current (reported/observed value).
+    # Omitted entirely when current=None so callers/tests that don't supply it
+    # are unaffected.
+    if current is not None:
+        set_rad, drift_ms = current
+        values.append(_v("environment.current.setTrue", set_rad))
+        values.append(_v("environment.current.drift",   drift_ms))
+
     return {
         "context": "vessels.self",
         "updates": [{"$source": "simulator.py", "timestamp": ts, "values": values}],
@@ -699,10 +708,11 @@ class SignalKWriter:
                                  next_wp: tuple[str, float, float] | None = None,
                                  route_href: str = "", point_index: int = 0,
                                  polars: Any = None, autopilot: Any = None,
-                                 closest_approach: tuple[float, float] | None = None) -> None:
+                                 closest_approach: tuple[float, float] | None = None,
+                                 current: tuple[float, float] | None = None) -> None:
         delta = _build_vessel_delta(nav, elec, sys_, lights, wx, state, utc_now, temps,
                                     next_wp, route_href, point_index, polars, autopilot,
-                                    closest_approach)
+                                    closest_approach, current)
         try:
             self._queue.put_nowait(json.dumps(delta))
         except asyncio.QueueFull:
