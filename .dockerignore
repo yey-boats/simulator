@@ -6,3 +6,7 @@ build/
 **/__pycache__/
 .pytest_cache/
 .ruff_cache/
+# node_modules are rebuilt inside the node stage
+frontend/node_modules/
+# static/ is rebuilt inside the node+python stages
+src/yey/boats/simulator/web/static/
