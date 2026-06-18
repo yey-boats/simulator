@@ -42,8 +42,8 @@ class SignalKSink:
             )
             bearing_rad = math.radians(
                 great_circle_bearing(nav.lat, nav.lon, nearest.lat, nearest.lon))
-            dist_m = haversine_nm(nav.lat, nav.lon, nearest.lat, nearest.lon) * 1852
-            closest_approach = (bearing_rad, dist_m)
+            dist_nm = haversine_nm(nav.lat, nav.lon, nearest.lat, nearest.lon)
+            closest_approach = (bearing_rad, dist_nm * 1852)
 
         await self.writer.send_vessel_delta(
             snapshot.nav, snapshot.elec, snapshot.sys, snapshot.lights,
