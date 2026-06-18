@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Pure route I/O helpers: GeoJSON <-> waypoint dicts, and validation.
 
 A waypoint dict is {"name": str, "lat": float, "lon": float}. GeoJSON uses

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 import math
 from yey.boats.simulator.engine.signalk_writer import _autopilot_values  # type: ignore[import]
 from yey.boats.simulator.engine.autopilot import Autopilot  # type: ignore[import]

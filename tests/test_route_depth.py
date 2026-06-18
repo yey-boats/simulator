@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 from yey.boats.simulator.engine import route as route_mod  # type: ignore[import]
 from yey.boats.simulator.engine.route import Route  # type: ignore[import]
 from yey.boats.simulator import resources  # type: ignore[import]

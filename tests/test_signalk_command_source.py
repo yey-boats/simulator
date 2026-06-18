@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 from yey.boats.simulator.sources.signalk_command import SignalKCommandSource  # type: ignore[import]
 
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 from yey.boats.simulator import resources  # type: ignore[import]
 from yey.boats.simulator.engine.navigator import Navigator, NavState  # type: ignore[import]
 from yey.boats.simulator.engine.schedule import SimState  # type: ignore[import]

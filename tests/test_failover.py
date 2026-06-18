@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 import pytest  # type: ignore[import]
 
 from yey.boats.simulator.adapters.failover import SinkChain  # type: ignore[import]

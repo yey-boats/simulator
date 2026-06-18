@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """AIS sources — re-exports the two independent AISSource adapters.
 
 Split into separate modules so the synthetic source's RNG and the AISStream

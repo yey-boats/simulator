@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # ruff: noqa: T201,S311
 """Synthetic AIS source — generates simulated vessel traffic around own position."""
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """DataSource backed by Open-Meteo (wraps the existing WeatherFetcher)."""
 from __future__ import annotations
 

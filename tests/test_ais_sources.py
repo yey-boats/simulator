@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 from yey.boats.simulator.engine.snapshot import AisContact  # type: ignore[import]
 from yey.boats.simulator.sources.ais import SyntheticAISSource, AISStreamSource  # type: ignore[import]
 

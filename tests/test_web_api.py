@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 import pytest
 
 from yey.boats.simulator.config import Settings

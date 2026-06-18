@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # signalk/sim/modules/weather.py
 # ruff: noqa: S311
 from __future__ import annotations

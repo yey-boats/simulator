@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Canonical per-tick telemetry frame consumed by every sink.
 
 The engine builds one of these each tick; sinks translate it to their wire

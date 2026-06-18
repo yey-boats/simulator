@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 from yey.boats.simulator.engine.command_listener import CommandHandler  # type: ignore[import]
 from yey.boats.simulator.engine.autopilot import Autopilot  # type: ignore[import]
 

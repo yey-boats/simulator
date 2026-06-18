@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # signalk/sim/modules/systems.py
 # ruff: noqa: E702
 from __future__ import annotations

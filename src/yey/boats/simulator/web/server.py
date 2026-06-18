@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Static SPA serving + a WebSettings holder. Wraps the JSON API from web.api."""
 from __future__ import annotations
 

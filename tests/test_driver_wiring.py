@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 from yey.boats.simulator.config import Settings  # type: ignore[import]
 from yey.boats.simulator.engine.runner import build_data_source  # type: ignore[import]
 from yey.boats.simulator.sources.open_meteo import OpenMeteoDataSource  # type: ignore[import]

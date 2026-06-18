@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Tests for environment.current.* emission through _build_vessel_delta and
 SignalKSink.publish().
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Resolve bundled package data and the runtime-writable data directory.
 
 Bundled data (polars, marinas, route) ships inside the wheel and is read via

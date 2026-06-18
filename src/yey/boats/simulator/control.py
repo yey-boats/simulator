@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """SimController: owns live Settings+Route and (re)runs the engine pipeline.
 
 Live-apply = cancel the running pipeline task and start a new one with the new

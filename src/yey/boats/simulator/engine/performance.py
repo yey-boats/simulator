@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # SPDX-License-Identifier: MIT
 # signalk/sim/modules/performance.py
 """Sim realism: a helm/sea-state efficiency factor applied to polar boat speed

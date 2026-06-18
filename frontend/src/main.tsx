@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";

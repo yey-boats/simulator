@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # ruff: noqa: BLE001
 """DataSource backed by a SignalK server's live environment readings.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # signalk/sim/modules/schedule.py
 from __future__ import annotations
 from datetime import datetime

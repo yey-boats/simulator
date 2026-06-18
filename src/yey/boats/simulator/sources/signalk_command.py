@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """CommandSource backed by the SignalK steering.autopilot.command channel.
 
 Wraps the migrated CommandHandler/CommandListener so autopilot commands flow

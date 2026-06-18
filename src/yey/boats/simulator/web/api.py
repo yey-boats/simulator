@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """aiohttp JSON API for the simulator web admin.
 
 Secrets are write-only: GET masks them as <field>_set booleans; PUT with an

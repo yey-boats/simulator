@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """SinkChain: try telemetry sinks in priority order, demoting on failure.
 
 open() walks the chain until one connects; publish() forwards to the active

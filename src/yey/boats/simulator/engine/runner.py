@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # yey/boats/simulator/engine/runner.py
 # ruff: noqa: T201,BLE001,S110
 """Driver: builds ports + Engine and runs the 1 Hz loop.

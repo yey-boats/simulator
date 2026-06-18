@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 import { useState } from "react";
 import StatusStrip from "./tabs/StatusStrip";
 import ConfigTab from "./tabs/ConfigTab";

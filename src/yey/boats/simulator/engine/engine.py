@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # yey/boats/simulator/engine/engine.py
 # ruff: noqa: T201,BLE001,S110
 """Deterministic, I/O-isolated simulation engine.

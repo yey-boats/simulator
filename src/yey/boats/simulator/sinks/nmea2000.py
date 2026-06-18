@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """NMEA 2000 sink — Phase C. Will encode PGNs over CAN (python-can) / serial /
 stdout. Registered now so the sink registry and CLI know the type."""
 from __future__ import annotations

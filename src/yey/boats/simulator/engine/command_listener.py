@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # signalk/sim/modules/command_listener.py
 """Subscribe to steering.autopilot.command on the SignalK stream and apply
 commands to the Autopilot. CommandHandler is pure (testable); CommandListener is

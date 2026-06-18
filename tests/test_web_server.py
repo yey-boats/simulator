@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 from yey.boats.simulator.config import Settings
 from yey.boats.simulator.control import SimController
 from yey.boats.simulator.web.server import make_full_app, web_settings_from

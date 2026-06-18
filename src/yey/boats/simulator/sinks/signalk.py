@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """SignalK telemetry sink: adapts TelemetrySnapshot to the existing
 SignalKWriter. open() connects; publish() forwards the snapshot fields to
 send_vessel_delta. close() tears down the connection.

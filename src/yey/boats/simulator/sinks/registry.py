@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Build the configured sink (and failover chain) from Settings."""
 from __future__ import annotations
 

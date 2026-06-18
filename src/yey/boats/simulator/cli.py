@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Command-line entry point for yey-boats-sim."""
 from __future__ import annotations
 

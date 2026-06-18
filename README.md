@@ -39,6 +39,20 @@ pluggable output sinks.
 The engine builds a neutral telemetry frame each tick and hands it to the active
 sink. The default failover chain demotes SignalK -> SignalK@localhost -> stdout.
 
+## License
+
+Source-available under the **PolyForm Noncommercial License 1.0.0** (see
+[`LICENSE`](LICENSE)). You may use, modify, and share it for **any noncommercial
+purpose** — hobby, personal, research, education, and evaluation — at no cost.
+
+**Commercial use requires a separate commercial license.** If you want to use
+this in a product or service, or otherwise for commercial advantage, see
+[`COMMERCIAL.md`](COMMERCIAL.md) to obtain one. This is *source-available*, not an
+OSI "open source" license.
+
+Contributions are accepted under the [Developer Certificate of Origin](CONTRIBUTING.md)
+(a `Signed-off-by` line), which lets the project offer the commercial license.
+
 ---
 
 Powered by [KDCube](https://kdcube.tech/).

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # ruff: noqa: T201,BLE001
 """AISStream source — relays live AIS traffic from the AISStream WebSocket feed."""
 from __future__ import annotations

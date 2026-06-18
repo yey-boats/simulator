@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Port interfaces (structural Protocols) for the simulator's I/O boundaries.
 
 - TelemetrySink: output — consumes TelemetrySnapshot, writes a wire format.

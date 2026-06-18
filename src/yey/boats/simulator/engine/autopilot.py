@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # signalk/sim/modules/autopilot.py
 """Pure-logic autopilot controller for the boat simulator.
 

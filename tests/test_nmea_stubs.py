@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 import pytest  # type: ignore[import]
 
 from yey.boats.simulator.sinks.nmea0183 import NMEA0183Sink  # type: ignore[import]

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Single source of truth for runtime configuration.
 
 Precedence (low -> high): defaults < file < env < cli(overrides).

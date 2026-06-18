@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """NMEA 0183 sink — Phase C. Will encode RMC/GGA/VTG/HDG/MWV/DBT sentences over
 stdout or pyserial. Registered now so the sink registry and CLI know the type."""
 from __future__ import annotations

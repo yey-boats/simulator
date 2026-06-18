@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # signalk/sim/modules/synthetic_ais.py
 # ruff: noqa: T201,S311
 """Synthetic AIS traffic — injects a few moving vessels around own ship into

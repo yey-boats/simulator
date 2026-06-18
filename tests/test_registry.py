@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Unit tests for build_sink_chain branching logic."""
 from yey.boats.simulator.config import Settings  # type: ignore[import]
 from yey.boats.simulator.sinks.registry import build_sink_chain  # type: ignore[import]

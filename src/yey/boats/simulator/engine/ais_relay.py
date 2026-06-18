@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # signalk/sim/modules/ais_relay.py
 # ruff: noqa: T201
 from __future__ import annotations

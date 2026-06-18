@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Gap 2: navigation.closestApproach.* emitted on the SELF vessel delta.
 
 Tests verify:

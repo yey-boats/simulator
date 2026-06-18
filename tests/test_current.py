@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Tests for the tidal-current model (engine/current.py).
 
 Verifies:

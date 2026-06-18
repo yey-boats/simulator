@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 from datetime import datetime, timezone
 
 from yey.boats.simulator.engine.navigator import NavState  # type: ignore[import]

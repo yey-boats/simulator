@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Output-only sink: prints one JSON telemetry record per tick to stdout.
 
 Mirrors the legacy simulator_stub.py record shape so existing consumers and

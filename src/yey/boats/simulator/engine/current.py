@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Modelled tidal current for the Adriatic (NW–SE drift axis).
 
 `tidal_current(now)` is a pure, deterministic function of the UTC datetime.
