@@ -637,9 +637,6 @@ def _build_ais_delta(mmsi: str, lat: float, lon: float,
                 _v("name", name),
                 # Standard SignalK ship type (design.aisShipType shape).
                 _v("design.aisShipType", {"id": ship_type}),
-                # Legacy kdcube fields retained for back-compat.
-                _v("kdcube.ais.name", name),
-                _v("kdcube.ais.shipType", {"id": ship_type}),
             ],
         }],
     }

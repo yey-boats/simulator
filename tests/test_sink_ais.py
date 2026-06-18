@@ -65,11 +65,13 @@ def test_ais_delta_includes_standard_fields():
     values = delta["updates"][0]["values"]
     by_path = {v["path"]: v["value"] for v in values}
 
-    # Legacy kdcube fields must still be present (back-compat)
-    assert by_path["kdcube.ais.name"] == "MV Adriatic Star"
-    assert by_path["kdcube.ais.shipType"] == {"id": 70}
+    # Legacy kdcube.* fields must NOT be emitted — the sim injects only
+    # proper standard SignalK fields now.
+    assert "kdcube.ais.name" not in by_path
+    assert "kdcube.ais.shipType" not in by_path
+    assert not any(p.startswith("kdcube.") for p in by_path), "no kdcube.* keys allowed"
 
-    # New standard fields
+    # Standard fields
     assert by_path["name"] == "MV Adriatic Star", "standard 'name' field missing or wrong"
     assert by_path["design.aisShipType"] == {"id": 70}, "design.aisShipType missing or wrong"
 
