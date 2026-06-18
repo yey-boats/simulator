@@ -51,8 +51,20 @@ def _route_to_geojson(route: Route) -> dict:
     }
 
 
-async def run(settings: Settings) -> None:
-    route = Route.load(resources.route_kmz(), resources.marinas_json())
+async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
+    """Single run of the engine pipeline.
+
+    Args:
+        settings: Current Settings snapshot.
+        route: Pre-loaded Route, or None to load from resources.
+        start_pos: (lat, lon) tuple to resume from, or None to use SignalK/origin.
+        report_status: Callable[((lat, lon), connected: bool)] called after each
+            engine tick. `connected` is True when the SignalK sink is the active
+            chain member (i.e. not failed over).
+    """
+    if route is None:
+        route = Route.load(resources.route_kmz(), resources.marinas_json())
+
     print("[sim] fetching depth profile (may take ~30s first run)...", flush=True)
     route.load_depth_profile(resources.depth_cache_path(settings.data_dir))
     polars = Polars.load(resources.polar_csv())
@@ -63,16 +75,23 @@ async def run(settings: Settings) -> None:
     sk_sink = chain.active if isinstance(chain.active, SignalKSink) else None
     writer = sk_sink.writer if sk_sink else None
 
-    resume = await writer.get_self_position() if writer is not None else None
-    if resume is not None:
-        start_lat, start_lon = resume
+    if start_pos is not None:
+        start_lat, start_lon = start_pos
         idx, _ = route.resync_from_position(start_lat, start_lon)
         start_hdg = route.bearing_to_next(start_lat, start_lon)
         print(f"[sim] resuming from ({start_lat:.4f}, {start_lon:.4f}) -> leg {idx}", flush=True)
     else:
-        start_lat, start_lon = route.current.lat, route.current.lon
-        start_hdg = route.current.berth_heading
-        print(f"[sim] starting at origin {route.current.name}", flush=True)
+        resume = await writer.get_self_position() if writer is not None else None
+        if resume is not None:
+            start_lat, start_lon = resume
+            idx, _ = route.resync_from_position(start_lat, start_lon)
+            start_hdg = route.bearing_to_next(start_lat, start_lon)
+            print(f"[sim] resuming from ({start_lat:.4f}, {start_lon:.4f}) -> leg {idx}",
+                  flush=True)
+        else:
+            start_lat, start_lon = route.current.lat, route.current.lon
+            start_hdg = route.current.berth_heading
+            print(f"[sim] starting at origin {route.current.name}", flush=True)
 
     if writer is not None:
         try:
@@ -89,6 +108,7 @@ async def run(settings: Settings) -> None:
     data_source = build_data_source(settings)
 
     engine_ref: dict = {}
+
     def get_pos() -> tuple[float, float]:
         eng = engine_ref.get("engine")
         if eng is None:
@@ -109,6 +129,9 @@ async def run(settings: Settings) -> None:
             now = datetime.now(timezone.utc)
             snap = await engine.tick(now)
             await chain.publish(snap)
+            # chain.active may change over the run (failover); recompute each tick.
+            connected = isinstance(chain.active, SignalKSink)
+            report_status((engine.nav_state.lat, engine.nav_state.lon), connected)
             await asyncio.sleep(max(0, 1.0 - (time.monotonic() - t0)))
 
     tasks = [drive(), ais_source.start()]
@@ -121,3 +144,35 @@ async def run(settings: Settings) -> None:
                   cmd_src.run()]
 
     await asyncio.gather(*tasks)
+
+
+async def run_with_web(settings: Settings, args) -> None:
+    """Build SimController and optionally start the web admin, then run forever."""
+    from yey.boats.simulator.control import SimController
+    from yey.boats.simulator.web.server import WebSettings, web_settings_from, start_web
+
+    route = Route.load(resources.route_kmz(), resources.marinas_json())
+    route_json = settings.data_dir / "route.json"
+    if route_json.exists():
+        route = Route.load_json(route_json)
+
+    controller = SimController(settings, route, settings.data_dir, pipeline)
+
+    ws: WebSettings = web_settings_from(args)
+    tasks = [controller.run_forever()]
+    if ws.enabled:
+        # Start the web server as a coroutine that sets up AppRunner then waits forever
+        async def _web():
+            await start_web(controller, ws)
+            await asyncio.Event().wait()  # keep the task alive
+
+        tasks.append(_web())
+
+    await asyncio.gather(*tasks)
+
+
+async def run(settings: Settings) -> None:
+    """Legacy entry point (used by tests that import run directly)."""
+    from argparse import Namespace
+    args = Namespace(no_web=True, web_host=None, web_port=None, web_token=None)
+    await run_with_web(settings, args)

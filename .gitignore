@@ -8,3 +8,5 @@ dist/
 .ruff_cache/
 # runtime-generated GEBCO depth cache (DATA_DIR), never the bundled package data
 /run-data/
+# built SPA (artifact — rebuilt from frontend/ by npm run build)
+src/yey/boats/simulator/web/static/

@@ -137,6 +137,31 @@ class Route:
         self.current_index = best_i
         return best_i, near_d
 
+    def to_waypoint_dicts(self) -> list[dict]:
+        return [{"name": w.name, "lat": w.lat, "lon": w.lon} for w in self.waypoints]
+
+    @classmethod
+    def from_waypoint_dicts(cls, wps: list[dict]) -> "Route":
+        from yey.boats.simulator.routeio import validate_waypoints
+        valid = validate_waypoints(wps)
+        objs = [Waypoint(name=w["name"], lat=w["lat"], lon=w["lon"],
+                         marina="", berth_heading=0.0,
+                         refill_water=False, refill_fuel=False,
+                         pump_out_bw=False)
+                for w in valid]
+        return cls(waypoints=objs)
+
+    def save_json(self, path) -> None:
+        import json
+        from pathlib import Path
+        Path(path).write_text(json.dumps(self.to_waypoint_dicts(), indent=2))
+
+    @classmethod
+    def load_json(cls, path) -> "Route":
+        import json
+        from pathlib import Path
+        return cls.from_waypoint_dicts(json.loads(Path(path).read_text()))
+
     def load_depth_profile(self, cache_path: pathlib.Path,
                            samples_per_leg: int = 8) -> None:
         """Load depth profile from cache, or fetch from OpenTopoData and save.
