@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/tabs/configtab.tsx","./src/tabs/routemap.tsx","./src/tabs/routetab.tsx","./src/tabs/statusstrip.tsx","./src/tabs/statustab.tsx"],"version":"5.9.3"}
