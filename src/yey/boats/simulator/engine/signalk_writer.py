@@ -436,7 +436,10 @@ def _autopilot_values(ap: Any, hdg_deg: float) -> list[dict]:
         out.append(_v("steering.autopilot.target.windAngleApparent",
                       math.radians(s.target_wind_angle_deg)))
     target_hdg = s.target_heading_deg if s.target_heading_deg is not None else hdg_deg
-    out.append(_v("steering.autopilot.target.headingMagnetic", math.radians(target_hdg)))
+    target_rad = math.radians(target_hdg)
+    out.append(_v("steering.autopilot.target.headingMagnetic", target_rad))
+    # No magnetic variation model — true heading == magnetic heading in this sim.
+    out.append(_v("steering.autopilot.target.headingTrue", target_rad))
     return out
 
 
@@ -445,7 +448,8 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
                          utc_now: datetime, temps: dict,
                          next_wp: tuple[str, float, float] | None = None,
                          route_href: str = "", point_index: int = 0,
-                         polars: Any = None, autopilot: Any = None) -> dict:
+                         polars: Any = None, autopilot: Any = None,
+                         closest_approach: tuple[float, float] | None = None) -> dict:
     ts = _ts(utc_now)
     engine_on = state == SimState.MOTORED
     genset_on = elec.genset_state == "running"
@@ -587,6 +591,14 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
     if autopilot is not None:
         values.extend(_autopilot_values(autopilot, nav.hdg_deg))
 
+    # navigation.closestApproach.* — sim convention (no SK standard).
+    # Bearing (radians, true) and distance (metres) to the nearest AIS contact.
+    # Omitted entirely when there are no contacts.
+    if closest_approach is not None:
+        bearing_rad, dist_m = closest_approach
+        values.append(_v("navigation.closestApproach.bearingTrue", bearing_rad))
+        values.append(_v("navigation.closestApproach.distance",    dist_m))
+
     return {
         "context": "vessels.self",
         "updates": [{"$source": "simulator.py", "timestamp": ts, "values": values}],
@@ -618,8 +630,14 @@ def _build_ais_delta(mmsi: str, lat: float, lon: float,
                 _v("navigation.position", {"latitude": lat, "longitude": lon}),
                 _v("navigation.courseOverGroundTrue", math.radians(cog_deg)),
                 _v("navigation.speedOverGround",      sog_kts * 0.514444),
-                # Avoid root vessel fields such as "name"; SignalK keeps some
-                # of them as scalars and later metadata updates can conflict.
+                # AIS targets without a transmitted true heading conventionally
+                # fall back to COG as the heading approximation.
+                _v("navigation.headingTrue", math.radians(cog_deg)),
+                # Standard SignalK vessel name (top-level field).
+                _v("name", name),
+                # Standard SignalK ship type (design.aisShipType shape).
+                _v("design.aisShipType", {"id": ship_type}),
+                # Legacy kdcube fields retained for back-compat.
                 _v("kdcube.ais.name", name),
                 _v("kdcube.ais.shipType", {"id": ship_type}),
             ],
@@ -683,9 +701,11 @@ class SignalKWriter:
                                  utc_now: datetime, temps: dict,
                                  next_wp: tuple[str, float, float] | None = None,
                                  route_href: str = "", point_index: int = 0,
-                                 polars: Any = None, autopilot: Any = None) -> None:
+                                 polars: Any = None, autopilot: Any = None,
+                                 closest_approach: tuple[float, float] | None = None) -> None:
         delta = _build_vessel_delta(nav, elec, sys_, lights, wx, state, utc_now, temps,
-                                    next_wp, route_href, point_index, polars, autopilot)
+                                    next_wp, route_href, point_index, polars, autopilot,
+                                    closest_approach)
         try:
             self._queue.put_nowait(json.dumps(delta))
         except asyncio.QueueFull:

@@ -9,8 +9,10 @@ Position-resume and route-resource registration are performed by the runner via
 """
 from __future__ import annotations
 
+import math
 from typing import Any
 
+from yey.boats.simulator.engine.route import great_circle_bearing, haversine_nm  # type: ignore[import]
 from yey.boats.simulator.engine.signalk_writer import SignalKWriter  # type: ignore[import]
 from yey.boats.simulator.engine.snapshot import TelemetrySnapshot  # type: ignore[import]
 
@@ -30,12 +32,25 @@ class SignalKSink:
         await self.writer.connect(self._username, self._password)
 
     async def publish(self, snapshot: TelemetrySnapshot) -> None:
+        # Compute nearest AIS contact bearing/distance for closestApproach paths.
+        closest_approach: tuple[float, float] | None = None
+        if snapshot.ais_contacts:
+            nav = snapshot.nav
+            nearest = min(
+                snapshot.ais_contacts,
+                key=lambda c: haversine_nm(nav.lat, nav.lon, c.lat, c.lon),
+            )
+            bearing_rad = math.radians(
+                great_circle_bearing(nav.lat, nav.lon, nearest.lat, nearest.lon))
+            dist_m = haversine_nm(nav.lat, nav.lon, nearest.lat, nearest.lon) * 1852
+            closest_approach = (bearing_rad, dist_m)
+
         await self.writer.send_vessel_delta(
             snapshot.nav, snapshot.elec, snapshot.sys, snapshot.lights,
             snapshot.wx, snapshot.state, snapshot.utc_now, snapshot.temps,
             next_wp=snapshot.next_wp, route_href=snapshot.route_href,
             point_index=snapshot.point_index, polars=snapshot.polars,
-            autopilot=snapshot.autopilot)
+            autopilot=snapshot.autopilot, closest_approach=closest_approach)
         for c in snapshot.ais_contacts:
             await self.writer.enqueue_ais(c.mmsi, c.lat, c.lon, c.cog_deg,
                                           c.sog_kts, c.name, c.ship_type)

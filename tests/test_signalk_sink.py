@@ -13,7 +13,8 @@ class FakeWriter:
     async def connect(self, u, p): self.connected = (u, p)
     async def send_vessel_delta(self, nav, elec, sys_, lights, wx, state,
                                 utc_now, temps, next_wp=None, route_href="",
-                                point_index=0, polars=None, autopilot=None):
+                                point_index=0, polars=None, autopilot=None,
+                                closest_approach=None):
         self.deltas.append((nav, point_index, next_wp))  # noqa: S101
     async def close(self): self.closed = True
 

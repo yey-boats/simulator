@@ -1,10 +1,12 @@
 import json
+import math
 from datetime import datetime, timezone
 
 import pytest  # type: ignore[import]
 
 from yey.boats.simulator.engine.navigator import NavState  # type: ignore[import]
 from yey.boats.simulator.engine.schedule import SimState  # type: ignore[import]
+from yey.boats.simulator.engine.signalk_writer import _build_ais_delta  # type: ignore[import]
 from yey.boats.simulator.engine.snapshot import AisContact, TelemetrySnapshot  # type: ignore[import]
 from yey.boats.simulator.sinks.signalk import SignalKSink  # type: ignore[import]
 from yey.boats.simulator.sinks.stdout_json import StdoutJsonSink  # type: ignore[import]
@@ -51,6 +53,30 @@ async def test_signalk_sink_emits_contacts_and_advances_on_index_change():
     assert w.advances == 0  # noqa: S101
     await sink.publish(_snap(point_index=3, contacts=c))
     assert w.advances == 1  # noqa: S101
+
+
+def test_ais_delta_includes_standard_fields():
+    """Gap 3: AIS delta must include standard SK name/design.aisShipType/navigation.headingTrue."""
+    delta = _build_ais_delta(
+        mmsi="247100111", lat=45.1, lon=13.2,
+        cog_deg=135.0, sog_kts=11.0,
+        name="MV Adriatic Star", ship_type=70,
+    )
+    values = delta["updates"][0]["values"]
+    by_path = {v["path"]: v["value"] for v in values}
+
+    # Legacy kdcube fields must still be present (back-compat)
+    assert by_path["kdcube.ais.name"] == "MV Adriatic Star"
+    assert by_path["kdcube.ais.shipType"] == {"id": 70}
+
+    # New standard fields
+    assert by_path["name"] == "MV Adriatic Star", "standard 'name' field missing or wrong"
+    assert by_path["design.aisShipType"] == {"id": 70}, "design.aisShipType missing or wrong"
+
+    # navigation.headingTrue from COG (no transmitted heading — conventional fallback)
+    expected_hdg_rad = math.radians(135.0)
+    assert abs(by_path["navigation.headingTrue"] - expected_hdg_rad) < 1e-9, (
+        "navigation.headingTrue missing or wrong")
 
 
 @pytest.mark.asyncio
