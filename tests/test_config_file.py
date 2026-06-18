@@ -27,7 +27,7 @@ def test_precedence_cli_over_env_over_file(tmp_path: Path, monkeypatch):
     Settings(signalk_host="from-file", signalk_port=3002).save(p)
     monkeypatch.setenv("SIGNALK_HOST", "from-env")
     # file provides port 3002; env overrides host; cli override wins for username
-    s = Settings.from_env(config_path=p, username_override=None,
+    s = Settings.from_env(config_path=p,
                           **{"signalk_username": "from-cli"})
     assert s.signalk_host == "from-env"      # env beats file
     assert s.signalk_port == 3002            # file beats default

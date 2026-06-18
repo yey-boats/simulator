@@ -110,6 +110,7 @@ def make_app(controller, token: str | None) -> web.Application:
         field = await reader.next()
         raw = await field.read()
         name = (field.filename or "").lower()
+        tmp = None
         try:
             if name.endswith(".kmz"):
                 import pathlib
@@ -122,8 +123,11 @@ def make_app(controller, token: str | None) -> web.Application:
                 import json
                 wps = waypoints_from_geojson(json.loads(raw.decode()))
             wps = validate_waypoints(wps)
-        except (WaypointError, Exception) as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             return web.json_response({"errors": {"file": str(exc)}}, status=400)
+        finally:
+            if tmp is not None:
+                tmp.unlink(missing_ok=True)
         return web.json_response({"waypoints": wps})
 
     async def get_status(request):

@@ -30,6 +30,17 @@ async def test_api_still_works_with_static(aiohttp_client, tmp_path):
     assert (await cli.get("/api/status")).status == 200
 
 
+async def test_token_allows_spa_blocks_api(aiohttp_client, tmp_path):
+    static = tmp_path / "static"
+    static.mkdir()
+    (static / "index.html").write_text("<!doctype html><title>sim</title>")
+    cli = await aiohttp_client(make_full_app(_ctl(tmp_path), token="t0p", static_dir=static))
+    # SPA assets must load unauthenticated so the page can come up and prompt.
+    assert (await cli.get("/")).status == 200
+    # API requires the token.
+    assert (await cli.get("/api/status")).status == 401
+
+
 def test_web_flags_default_on_loopback():
     ws = web_settings_from(parse_args([]))
     assert ws.enabled is True
