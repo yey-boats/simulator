@@ -27,6 +27,9 @@ yey-boats-sim = "yey.boats.simulator.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/yey"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"src/yey/boats/simulator/web/static" = "yey/boats/simulator/web/static"
+
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
