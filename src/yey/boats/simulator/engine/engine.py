@@ -136,10 +136,12 @@ class Engine:
         contacts = self._ais.get_contacts(self.nav_state.lat, self.nav_state.lon)
         current_set_deg, current_drift_kts = tidal_current(now)
         nwp = self.route.next_wp
+        cwp = self.route.current  # active leg origin (previous waypoint)
         snap = TelemetrySnapshot(
             nav=self.nav_state, elec=elec_state, sys=sys_state, lights=lights_state,
             wx=wx, state=self.sched.state, utc_now=now, temps=temps,
             next_wp=(nwp.name, nwp.lat, nwp.lon),
+            prev_wp=(cwp.name, cwp.lat, cwp.lon),
             route_href=f"/resources/routes/{ROUTE_UUID}",
             point_index=self.route.current_index, polars=self.polars,
             autopilot=self.autopilot,

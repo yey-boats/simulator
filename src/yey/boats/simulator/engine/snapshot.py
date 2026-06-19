@@ -37,6 +37,7 @@ class TelemetrySnapshot:
     point_index: int
     polars: Any = None
     autopilot: Any = None
+    prev_wp: tuple[str, float, float] | None = None  # active leg origin (route.current)
     distance_to_next_nm: float = 0.0
     ais_contacts: list[AisContact] = field(default_factory=list)
     current_set_deg: float = 0.0    # modelled current direction (degrees true, toward)

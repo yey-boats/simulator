@@ -60,7 +60,7 @@ class SignalKSink:
             next_wp=snapshot.next_wp, route_href=snapshot.route_href,
             point_index=snapshot.point_index, polars=snapshot.polars,
             autopilot=snapshot.autopilot, closest_approach=closest_approach,
-            current=current)
+            current=current, prev_wp=snapshot.prev_wp)
         for c in snapshot.ais_contacts:
             await self.writer.enqueue_ais(c.mmsi, c.lat, c.lon, c.cog_deg,
                                           c.sog_kts, c.name, c.ship_type)

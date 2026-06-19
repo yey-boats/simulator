@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 import websockets  # type: ignore[import]
 from yey.boats.simulator.engine.navigator import NavState, engine_rpm, engine_fuel_L_h  # type: ignore[import]
+from yey.boats.simulator.engine.route import haversine_nm, great_circle_bearing  # type: ignore[import]
 from yey.boats.simulator.engine.electrical import ElecState  # type: ignore[import]
 from yey.boats.simulator.engine.systems import SystemsState  # type: ignore[import]
 from yey.boats.simulator.engine.lights import LightsState  # type: ignore[import]
@@ -18,6 +19,13 @@ from yey.boats.simulator.engine.weather import WeatherPoint  # type: ignore[impo
 SELF_MMSI    = "235177007"
 MS_TO_KTS    = 1.94384
 BATTERY_WH_J = 14400 * 3600   # 1200 Ah × 12 V, in joules
+EARTH_R_M    = 6371000.0      # mean earth radius, metres (for cross-track)
+
+# Vertical distance from the depth transducer (hull-mounted, near the
+# waterline) down to the bottom of the keel. environment.depth.belowKeel +
+# this offset = environment.depth.belowTransducer (Beneteau O45: ~2.2 m draft,
+# transducer ~0.6 m below the waterline → ~1.5 m of keel below the transducer).
+KEEL_TO_TRANSDUCER_M = 1.5
 
 # ──────────────────────────────────────────────────────────────────────────────
 # SignalK metadata — sent once at startup via PUT to /api/vessels/self/{path}/meta
@@ -104,6 +112,14 @@ _METADATA: dict[str, dict] = {
     # ── Depth ── RB-DEPTHY-DEEP: 200 kHz single-beam depth sounder ───────
     "environment.depth.belowKeel": {
         "description": "Water depth below keel", "units": "m", "timeout": 3,
+        "source": {"manufacturer": _RB, "model": "RB-DEPTHY-DEEP"},
+    },
+    "environment.depth.belowTransducer": {
+        "description": "Water depth below the hull transducer", "units": "m", "timeout": 3,
+        "source": {"manufacturer": _RB, "model": "RB-DEPTHY-DEEP"},
+    },
+    "environment.water.temperature": {
+        "description": "Sea water temperature at the transducer", "units": "K", "timeout": 10,
         "source": {"manufacturer": _RB, "model": "RB-DEPTHY-DEEP"},
     },
     # ── Meteo/swell ── RB-CLOUD-WHISPERER: Open-Meteo forecast, 1 h cache
@@ -358,10 +374,27 @@ _METADATA: dict[str, dict] = {
         "units": "m3/s", "timeout": 5,
         "source": {"manufacturer": _RB, "model": "RB-FUEL-FLOW-PRO"},
     },
-    # ── Course / next waypoint ── now owned by the SignalK Course API +
-    # @signalk/course-provider once the route is activated (see put_active_route).
-    # The sim no longer hand-publishes navigation.courseGreatCircle.* to avoid a
-    # second $source conflicting with the server-computed values.
+    # ── Course / next waypoint ── RB-PLOTTER-9000: legacy v1 rhumbline course.
+    # The v2 Course API (put_active_route + @signalk/course-provider) publishes
+    # navigation.course.calcValues.*, which the firmware does NOT subscribe to.
+    # The firmware (and other v1 consumers) read navigation.courseRhumbline.*,
+    # so the sim hand-publishes those legs here from its own route state.
+    "navigation.courseRhumbline.nextPoint.distance": {
+        "description": "Distance to the next waypoint (rhumbline)", "units": "m", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-PLOTTER-9000"},
+    },
+    "navigation.courseRhumbline.nextPoint.bearingTrue": {
+        "description": "Bearing to the next waypoint, true", "units": "rad", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-PLOTTER-9000"},
+    },
+    "navigation.courseRhumbline.bearingTrackTrue": {
+        "description": "Course to steer along the active leg, true", "units": "rad", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-PLOTTER-9000"},
+    },
+    "navigation.courseRhumbline.crossTrackError": {
+        "description": "Cross-track error, + to starboard of the leg", "units": "m", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-PLOTTER-9000"},
+    },
     # ── Autopilot ── RB-OTTO-PILOT: simulated autopilot ──────────────────────
     "steering.autopilot.state": {
         "description": "Autopilot mode: standby/auto/wind/route", "timeout": 5,
@@ -425,6 +458,49 @@ def _v(path: str, value: Any) -> dict:
     return {"path": path, "value": value}
 
 
+def _cross_track_m(lat1: float, lon1: float, lat2: float, lon2: float,
+                   lat3: float, lon3: float) -> float:
+    """Signed cross-track distance (m) of point 3 from the great-circle path
+    1→2 (leg start → leg end). + = point 3 is to starboard (right) of the
+    leg, − = to port (left), matching the SignalK crossTrackError convention.
+    """
+    d13 = haversine_nm(lat1, lon1, lat3, lon3) * 1852.0 / EARTH_R_M  # angular, rad
+    theta13 = math.radians(great_circle_bearing(lat1, lon1, lat3, lon3))
+    theta12 = math.radians(great_circle_bearing(lat1, lon1, lat2, lon2))
+    return math.asin(math.sin(d13) * math.sin(theta13 - theta12)) * EARTH_R_M
+
+
+def _course_values(lat: float, lon: float,
+                   prev_wp: tuple[str, float, float] | None,
+                   next_wp: tuple[str, float, float] | None) -> list[dict]:
+    """Legacy v1 rhumbline course legs from the sim's own route state, for
+    firmware/consumers that don't read the v2 Course API. Empty when there is
+    no active next waypoint."""
+    if next_wp is None:
+        return []
+    _, nlat, nlon = next_wp
+    out = [
+        _v("navigation.courseRhumbline.nextPoint.distance",
+           haversine_nm(lat, lon, nlat, nlon) * 1852.0),
+        _v("navigation.courseRhumbline.nextPoint.bearingTrue",
+           math.radians(great_circle_bearing(lat, lon, nlat, nlon))),
+    ]
+    # Course-to-steer and cross-track need the leg origin. With a previous
+    # waypoint we use the true leg (prev→next); steering directly to the
+    # waypoint (no distinct origin) degrades gracefully to BTW with zero XTE.
+    if prev_wp is not None and (prev_wp[1], prev_wp[2]) != (nlat, nlon):
+        _, plat, plon = prev_wp
+        out.append(_v("navigation.courseRhumbline.bearingTrackTrue",
+                      math.radians(great_circle_bearing(plat, plon, nlat, nlon))))
+        out.append(_v("navigation.courseRhumbline.crossTrackError",
+                      _cross_track_m(plat, plon, nlat, nlon, lat, lon)))
+    else:
+        out.append(_v("navigation.courseRhumbline.bearingTrackTrue",
+                      math.radians(great_circle_bearing(lat, lon, nlat, nlon))))
+        out.append(_v("navigation.courseRhumbline.crossTrackError", 0.0))
+    return out
+
+
 def _autopilot_values(ap: Any, hdg_deg: float) -> list[dict]:
     """SignalK delta values for the autopilot from its current state."""
     s = ap.state
@@ -451,7 +527,8 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
                          route_href: str = "", point_index: int = 0,
                          polars: Any = None, autopilot: Any = None,
                          closest_approach: tuple[float, float] | None = None,
-                         current: tuple[float, float] | None = None) -> dict:
+                         current: tuple[float, float] | None = None,
+                         prev_wp: tuple[str, float, float] | None = None) -> dict:
     ts = _ts(utc_now)
     engine_on = state == SimState.MOTORED
     genset_on = elec.genset_state == "running"
@@ -479,6 +556,10 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
         _v("environment.wind.speedTrue",      nav.tws_kts * 0.514444),
         # Environment
         _v("environment.depth.belowKeel",       nav.depth_m),
+        _v("environment.depth.belowTransducer", nav.depth_m + KEEL_TO_TRANSDUCER_M),
+        # Sea water temp: stable, a touch cooler than 2 m air, plausible range.
+        _v("environment.water.temperature",
+           min(max(wx.temp_c - 1.5, 10.0), 28.0) + 273.15),
         _v("environment.water.swell.height",    wx.wave_height_m),
         _v("environment.water.swell.period",    wx.wave_period_s),
         _v("environment.water.swell.direction", math.radians(wx.wave_dir_deg)),
@@ -558,11 +639,13 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
     for k, vv in load_entries:
         values.append(_v(f"electrical.loads.{k}.state", "on" if vv > 0 else "off"))
 
-    # Course — next/previous waypoint, distance/bearing and crossTrackError are
-    # now published by the SignalK Course API + @signalk/course-provider once the
-    # route is activated (writer.put_active_route). The sim no longer hand-publishes
-    # navigation.courseGreatCircle.* here. (next_wp/route_href/point_index params
-    # are retained for call-site compatibility but unused.)
+    # Course — legacy v1 rhumbline legs (distance/bearing/CTS/XTE) computed from
+    # the sim's own route state. The v2 Course API (put_active_route +
+    # @signalk/course-provider) publishes navigation.course.calcValues.*, which
+    # the firmware does not subscribe to; it reads navigation.courseRhumbline.*.
+    # Emitted only while a next waypoint is active (route_href/point_index are
+    # retained for call-site compatibility).
+    values.extend(_course_values(nav.lat, nav.lon, prev_wp, next_wp))
 
     # Performance — derived from the sim polar at the CURRENT true wind. Emitted
     # in SI (speeds m/s, angles radians) so the bundle's native reader
@@ -710,10 +793,11 @@ class SignalKWriter:
                                  route_href: str = "", point_index: int = 0,
                                  polars: Any = None, autopilot: Any = None,
                                  closest_approach: tuple[float, float] | None = None,
-                                 current: tuple[float, float] | None = None) -> None:
+                                 current: tuple[float, float] | None = None,
+                                 prev_wp: tuple[str, float, float] | None = None) -> None:
         delta = _build_vessel_delta(nav, elec, sys_, lights, wx, state, utc_now, temps,
                                     next_wp, route_href, point_index, polars, autopilot,
-                                    closest_approach, current)
+                                    closest_approach, current, prev_wp)
         try:
             self._queue.put_nowait(json.dumps(delta))
         except asyncio.QueueFull:
