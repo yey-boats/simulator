@@ -76,8 +76,11 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
     # unchanged (instant); otherwise the engine starts on the planner legs and a
     # background task computes the navigable legs, then swaps them in.
     autoroute_fp = route.planner_fingerprint()
+    # Full cfg signature: any routing-tuning change invalidates a cached route.
     autoroute_cfg_sig = [route_cfg.hard_min_m, route_cfg.soft_min_m,
-                         route_cfg.prefer_m, route_cfg.bbox_margin_deg]
+                         route_cfg.prefer_m, route_cfg.penalty_necessary,
+                         route_cfg.penalty_tolerated, route_cfg.bbox_margin_deg,
+                         route_cfg.max_cells, route_cfg.max_nodes]
     autoroute_cache = resources.autoroute_cache_path(settings.data_dir)
     cached_wps = Route.load_expanded_waypoints(autoroute_cache, autoroute_fp, autoroute_cfg_sig)
     autoroute_needed = cached_wps is None
@@ -145,8 +148,38 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
                     start_state=start_state, grid=grid)
     engine_ref["engine"] = engine
 
+    # One-slot handoff: autoroute_bg() computes the expanded waypoints in a
+    # worker thread and drops them here; drive() applies the swap at the TOP of
+    # its loop, before engine.tick(), where no tick is suspended. The swap must
+    # not land mid-tick — engine.tick() awaits between its reads of the route, so
+    # swapping during a tick would yield one logically-torn snapshot.
+    pending_route: dict = {}
+
+    async def _apply_pending_route():
+        new_wps = pending_route.pop("wps", None)
+        if new_wps is None:
+            return
+        # Synchronous, atomic relative to a tick (no await between these two):
+        route.waypoints = new_wps
+        route.resync_from_position(engine.nav_state.lat, engine.nav_state.lon)
+        try:
+            route.save_expanded_route(autoroute_cache, autoroute_fp, autoroute_cfg_sig)
+        except OSError as exc:
+            print(f"[sim] autoroute cache write failed (non-fatal): {exc!r}", flush=True)
+        next_idx = (route.current_index + 1) % len(route.waypoints)  # snapshot before awaits
+        print(f"[sim] autoroute: applied navigable route ({len(new_wps)} wp, background)",
+              flush=True)
+        if writer is not None:
+            try:
+                await writer.put_route_resource(ROUTE_UUID, _route_to_geojson(route))
+                await writer.put_active_route(ROUTE_UUID, next_idx)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[sim] autoroute route re-upload failed (non-fatal): {exc!r}",
+                      flush=True)
+
     async def drive():
         while True:
+            await _apply_pending_route()   # between ticks: safe swap point
             t0 = time.monotonic()
             now = datetime.now(timezone.utc)
             snap = await engine.tick(now)
@@ -157,11 +190,11 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
             await asyncio.sleep(max(0, 1.0 - (time.monotonic() - t0)))
 
     async def autoroute_bg():
-        """Compute navigable legs off the startup path. Runs the pure expansion
-        in a worker thread against a PRIVATE in-memory grid (no shared state with
-        the live depth grid), then swaps the result in + re-resyncs + persists on
-        the event loop (race-free between ticks). On any failure (e.g. GEBCO 429)
-        it keeps the planner legs and does not persist, so a later boot retries."""
+        """Compute navigable legs off the startup path, in a worker thread against
+        a PRIVATE in-memory grid (no shared state with the live depth grid). The
+        result is handed to drive() which applies it between ticks. On any failure
+        (e.g. GEBCO 429) it keeps the planner legs and does not persist, so a
+        later boot retries."""
         planner_snapshot = list(route.waypoints)
         rgrid = GeoGrid(fetcher=_opentopo_fetch)  # private, in-memory
         try:
@@ -171,23 +204,7 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
             print(f"[sim] autoroute background failed (keeping planner legs): {exc!r}",
                   flush=True)
             return
-        inserted = len(new_wps) - len(planner_snapshot)
-        route.waypoints = new_wps
-        route.resync_from_position(engine.nav_state.lat, engine.nav_state.lon)
-        try:
-            route.save_expanded_route(autoroute_cache, autoroute_fp, autoroute_cfg_sig)
-        except OSError as exc:
-            print(f"[sim] autoroute cache write failed (non-fatal): {exc!r}", flush=True)
-        print(f"[sim] autoroute: applied {inserted} navigable waypoints (background)",
-              flush=True)
-        if writer is not None:
-            try:
-                await writer.put_route_resource(ROUTE_UUID, _route_to_geojson(route))
-                await writer.put_active_route(
-                    ROUTE_UUID, (route.current_index + 1) % len(route.waypoints))
-            except Exception as exc:  # noqa: BLE001
-                print(f"[sim] autoroute route re-upload failed (non-fatal): {exc!r}",
-                      flush=True)
+        pending_route["wps"] = new_wps   # drive() applies it between ticks
 
     tasks = [drive(), ais_source.start(), grid.fetch_loop()]
     if autoroute_needed:
