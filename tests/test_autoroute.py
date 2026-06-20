@@ -110,3 +110,27 @@ def test_fallback_on_bbox_cap():
     a, b = (45.0, 12.95), (45.0, 13.10)
     path = autoroute_leg(g, a, b, cfg)
     assert path == [a, b]                             # bbox cap -> straight leg
+
+
+from yey.boats.simulator.engine.route import Route, Waypoint  # type: ignore[import]  # noqa: E402
+
+
+def _two_wp_route(a, b):
+    r = Route(waypoints=[
+        Waypoint(name="A", lat=a[0], lon=a[1], marina="", berth_heading=0.0,
+                 refill_water=False, refill_fuel=False, pump_out_bw=False),
+        Waypoint(name="B", lat=b[0], lon=b[1], marina="", berth_heading=0.0,
+                 refill_water=False, refill_fuel=False, pump_out_bw=False),
+    ])
+    return r
+
+
+def test_autoroute_legs_inserts_interior_points_around_land():
+    g = GeoGrid(fetcher=_barrier_fetcher, cell_deg=0.02)
+    r = _two_wp_route((45.0, 12.95), (45.0, 13.10))
+    inserted = r.autoroute_legs(g, AutorouteConfig())
+    assert inserted >= 1
+    names = [w.name for w in r.waypoints]
+    assert names[0] == "A" and names[-1] == "B"          # endpoints preserved
+    for w in r.waypoints:
+        assert not g.is_land(w.lat, w.lon)               # all navigable

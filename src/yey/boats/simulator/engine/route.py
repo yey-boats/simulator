@@ -152,6 +152,30 @@ class Route:
                 for w in valid]
         return cls(waypoints=objs)
 
+    def autoroute_legs(self, grid, cfg) -> int:
+        """Replace each straight planner leg with a navigable polyline that
+        avoids land/shallow water. Planner waypoints are preserved as vertices;
+        interior points are inserted as synthetic ('auto') waypoints. Returns
+        the count of inserted interior points."""
+        from yey.boats.simulator.engine.autoroute import autoroute_leg
+        if len(self.waypoints) < 2:
+            return 0
+        planner = list(self.waypoints)
+        out: list = [planner[0]]
+        inserted = 0
+        for i in range(len(planner) - 1):
+            a, b = planner[i], planner[i + 1]
+            leg = autoroute_leg(grid, (a.lat, a.lon), (b.lat, b.lon), cfg)
+            for lat, lon in leg[1:-1]:                   # interior points only
+                out.append(Waypoint(name=f"auto-{i}-{inserted}",
+                                    lat=lat, lon=lon, marina="",
+                                    berth_heading=0.0, refill_water=False,
+                                    refill_fuel=False, pump_out_bw=False))
+                inserted += 1
+            out.append(b)                                # keep planner endpoint
+        self.waypoints = out
+        return inserted
+
     def save_json(self, path) -> None:
         import json
         from pathlib import Path
