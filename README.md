@@ -55,7 +55,3 @@ OSI "open source" license.
 
 Contributions are accepted under the [Developer Certificate of Origin](CONTRIBUTING.md)
 (a `Signed-off-by` line), which lets the project offer the commercial license.
-
----
-
-Powered by [KDCube](https://kdcube.tech/).
