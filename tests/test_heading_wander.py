@@ -10,6 +10,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest  # type: ignore[import]
 
+import math
+
 from yey.boats.simulator import resources  # type: ignore[import]
 from yey.boats.simulator.engine.autopilot import (  # type: ignore[import]
     Autopilot,
@@ -23,7 +25,20 @@ from yey.boats.simulator.engine.navigator import NavState  # type: ignore[import
 from yey.boats.simulator.engine.polars import Polars  # type: ignore[import]
 from yey.boats.simulator.engine.route import Route  # type: ignore[import]
 from yey.boats.simulator.engine.schedule import SimState  # type: ignore[import]
+from yey.boats.simulator.engine.signalk_writer import _build_vessel_delta  # type: ignore[import]
 from yey.boats.simulator.engine.weather import DEFAULT_WEATHER, WeatherPoint  # type: ignore[import]
+
+
+def _emitted_paths(snap) -> dict:
+    """Serialize a TelemetrySnapshot exactly as the SignalK sink does and return
+    a path->value map. This is what the firmware actually receives — asserting on
+    it (rather than on ``snap.nav.hdg_deg``) is what closes the live-lab gap where
+    the engine wandered internally but the wire heading was frozen at the AP target."""
+    delta = _build_vessel_delta(
+        snap.nav, snap.elec, snap.sys, snap.lights, snap.wx, snap.state,
+        snap.utc_now, snap.temps, next_wp=snap.next_wp, route_href=snap.route_href,
+        point_index=snap.point_index, polars=snap.polars, autopilot=snap.autopilot)
+    return {v["path"]: v["value"] for v in delta["updates"][0]["values"]}
 
 # Dead-calm weather: with no wind the boat motors a dead-straight leg (no
 # tacking, no sampled-wind jitter), which is exactly the "long straight route
@@ -190,3 +205,51 @@ async def test_route_following_leg_heading_wanders_and_rudder_works():
         assert abs(offset) <= bound, (
             f"emitted heading {emitted:.3f} strayed beyond the wander envelope "
             f"of leg bearing {cmd:.3f} (offset {offset:.3f}deg)")
+
+
+# ── regression: the WIRE values (post-serialization), not just snap.nav ──────
+
+@pytest.mark.asyncio
+async def test_emitted_heading_wanders_and_rudder_nonzero_in_auto_hold():
+    """Live-lab reproduction: AUTO hold must wander + work the rudder ON THE WIRE.
+
+    The lab observed ``navigation.headingTrue`` frozen at EXACTLY the autopilot
+    target (0.6513 rad) with ``steering.rudderAngle`` == 0, while position/SOG
+    kept advancing — i.e. the per-tick wander was not reaching the *serialized*
+    delta. Every other heading-wander test asserts on ``snap.nav.hdg_deg`` (the
+    in-engine value); none serialized through the writer, so a regression that
+    broke override→wire propagation would pass them all. This test runs the full
+    engine tick AND serializes through ``_build_vessel_delta`` (exactly what
+    ``SignalKSink.publish`` sends), then asserts on the emitted radian values.
+    """
+    eng = _engine()
+    # Reproduce the live config: autopilot in AUTO holding 0.6513 rad (≈37.32°).
+    target_rad = 0.6513
+    eng.submit_command("set_heading", math.degrees(target_rad))
+    now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=timezone.utc)
+
+    emitted_hdg_rad = []
+    emitted_rudder_rad = []
+    for i in range(60):
+        snap = await eng.tick(now + timedelta(seconds=i))
+        assert eng.autopilot.state.mode == "auto"  # fixture really is holding
+        p = _emitted_paths(snap)
+        emitted_hdg_rad.append(p["navigation.headingTrue"])
+        emitted_rudder_rad.append(p["steering.rudderAngle"])
+
+    # (a) The EMITTED heading is never frozen at exactly the AP target — the wander
+    # offset reaches the wire. (The original live bug: every sample == target.)
+    assert not all(abs(h - target_rad) < 1e-9 for h in emitted_hdg_rad), (
+        "emitted navigation.headingTrue frozen at the AP target — wander not "
+        "reaching the serialized delta")
+    spread_deg = math.degrees(max(emitted_hdg_rad) - min(emitted_hdg_rad))
+    assert spread_deg > 0.5, f"emitted heading appears frozen (spread={spread_deg:.3f}deg)"
+    assert spread_deg < 20.0, f"emitted heading wander unrealistically large ({spread_deg:.3f}deg)"
+
+    # (b) The EMITTED rudder is not pinned at exactly zero — the helm is working.
+    assert any(abs(r) > 1e-6 for r in emitted_rudder_rad), (
+        "emitted steering.rudderAngle stayed exactly zero — rudder frozen on the wire")
+    assert any(abs(r) > math.radians(0.2) for r in emitted_rudder_rad), (
+        "emitted rudder never moves meaningfully while holding")
+    assert all(abs(r) <= math.radians(Autopilot.MAX_RUDDER_DEG) for r in emitted_rudder_rad), (
+        "emitted rudder exceeded the physical maximum")

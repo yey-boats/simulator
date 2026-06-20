@@ -112,23 +112,31 @@ class Navigator:
              sim_state: SimState, dt_s: float = 1.0,
              efficiency: float = 1.0,
              heading_override: float | None = None) -> NavState:
+        # Heading selection is decided FIRST and is authoritative: a supplied
+        # `heading_override` (the autopilot's commanded heading PLUS the helm
+        # yaw-wander offset from Autopilot.steer) wins unconditionally and is
+        # never recomputed below. This is load-bearing — the live lab once froze
+        # navigation.headingTrue at exactly the AP target because a heading
+        # recompute clobbered the override after it was assigned; keep the
+        # override as the single, final source of hdg so the wander always
+        # reaches nav_state.hdg_deg (and thus the emitted delta) in every mode.
+        # See test_heading_wander.py::test_emitted_heading_wanders_and_rudder_*.
         if heading_override is not None:
             hdg = heading_override
-            if sim_state == SimState.MOTORED:
-                stw = MOTOR_STW_KTS
-            else:
-                stw = self._polars.boat_speed(tws_kts, abs(_normalise_angle(twd_deg - hdg)))
-                stw *= efficiency
         elif sim_state == SimState.MOTORED:
             hdg = wp_bearing
-            stw = MOTOR_STW_KTS  # Volvo D4-55 at 2200 RPM cruise (unaffected by sea state)
         else:
             hdg = self.sail_heading(state.lat, state.lon, wp_bearing,
                                     twd_deg, tws_kts)
+
+        # Speed is derived from the now-final heading. MOTORED is RPM-driven
+        # (Volvo D4-55 at 2200 RPM cruise, unaffected by sea state); under sail
+        # it comes from the polar at the TWA implied by `hdg`, scaled by the
+        # sea-state / helm efficiency so performance.polarSpeedRatio lands <1.0.
+        if sim_state == SimState.MOTORED:
+            stw = MOTOR_STW_KTS
+        else:
             stw = self._polars.boat_speed(tws_kts, abs(_normalise_angle(twd_deg - hdg)))
-            # Sea-state / helm efficiency: a seaway pulls sailing STW below the
-            # flat-water polar so performance.polarSpeedRatio lands realistically
-            # <1.0. Applied only under sail (MOTORED speed is RPM-driven).
             stw *= efficiency
 
         twa = _normalise_angle(twd_deg - hdg)
