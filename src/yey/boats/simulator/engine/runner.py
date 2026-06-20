@@ -10,6 +10,7 @@ SignalK transport side-tasks, and command-source wiring.
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from datetime import datetime, timezone
 
@@ -70,7 +71,17 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
     from yey.boats.simulator.engine.autoroute import AutorouteConfig  # type: ignore[import]
 
     grid = GeoGrid(cache_path=resources.geogrid_cache_path(settings.data_dir))
-    route_cfg = AutorouteConfig(hard_min_m=settings.boat_draft_m + 1.0)
+    # Search bounds are env-tunable: the public OpenTopoData endpoint needs
+    # conservative caps (its quota can't feed a big search), but a self-hosted
+    # bathymetry source (GEOGRID_API_URL → deploy/bathy-server) can route the
+    # long, island-threading Adriatic legs with larger caps.
+    _def = AutorouteConfig()
+    route_cfg = AutorouteConfig(
+        hard_min_m=settings.boat_draft_m + 1.0,
+        bbox_margin_deg=float(os.environ.get("AUTOROUTE_BBOX_MARGIN_DEG", _def.bbox_margin_deg)),
+        max_cells=int(os.environ.get("AUTOROUTE_MAX_CELLS", _def.max_cells)),
+        max_nodes=int(os.environ.get("AUTOROUTE_MAX_NODES", _def.max_nodes)),
+    )
     # Autoroute is NOT run inline: it can fetch a lot of GEBCO and would stall
     # startup. Reuse a persisted expanded route when the planner+cfg are
     # unchanged (instant); otherwise the engine starts on the planner legs and a

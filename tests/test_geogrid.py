@@ -87,3 +87,29 @@ def test_geogrid_cache_path(tmp_path):
     p = resources.geogrid_cache_path(tmp_path)
     assert p == tmp_path / "geogrid.json"
     assert tmp_path.exists()
+
+
+def test_opentopo_fetch_honors_env_url(monkeypatch):
+    """GEOGRID_API_URL repoints the fetcher at a self-hosted server, and the
+    public-only inter-batch sleep is skipped for a custom URL."""
+    from yey.boats.simulator.engine import geogrid as gg
+
+    captured = {}
+
+    class _Resp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"results": [{"elevation": -12.0}]}
+
+    def fake_get(url, timeout=30):
+        captured["url"] = url
+        return _Resp()
+
+    monkeypatch.setattr(gg.httpx, "get", fake_get)
+    monkeypatch.setenv("GEOGRID_API_URL", "http://localhost:8089/v1/gebco2020")
+    out = gg._opentopo_fetch([(43.0, 16.0)])
+    assert out == [-12.0]
+    assert captured["url"].startswith(
+        "http://localhost:8089/v1/gebco2020?locations=43.00000,16.00000")

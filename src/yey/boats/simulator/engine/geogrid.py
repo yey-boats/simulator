@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import time
 from pathlib import Path
 from typing import Callable, Iterable
@@ -28,15 +29,20 @@ Fetcher = Callable[[list[tuple[float, float]]], list[float]]
 
 
 def _opentopo_fetch(points: list[tuple[float, float]]) -> list[float]:
+    # GEOGRID_API_URL lets the lab point at a self-hosted OpenTopoData-compatible
+    # server (e.g. deploy/bathy-server) to avoid the public per-second/daily
+    # quota. The 1.1 s inter-batch sleep is only needed for the public endpoint.
+    base = os.environ.get("GEOGRID_API_URL", _OPENTOPO_URL)
+    is_public = base == _OPENTOPO_URL
     out: list[float] = []
     for i in range(0, len(points), 100):
         batch = points[i:i + 100]
         locs = "|".join(f"{lat:.5f},{lon:.5f}" for lat, lon in batch)
-        resp = httpx.get(f"{_OPENTOPO_URL}?locations={locs}", timeout=30)
+        resp = httpx.get(f"{base}?locations={locs}", timeout=30)
         resp.raise_for_status()
         for r in resp.json()["results"]:
             out.append(float(r.get("elevation") or 0.0))
-        if i + 100 < len(points):
+        if is_public and i + 100 < len(points):
             time.sleep(1.1)  # OpenTopoData public rate limit
     return out
 
