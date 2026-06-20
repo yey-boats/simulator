@@ -77,16 +77,42 @@ class GeoGrid:
 
     # ── elevation / depth (non-blocking) ─────────────────────────────────
     def elevation_at(self, lat: float, lon: float) -> float:
-        c = self._cell_of(lat, lon)
-        v = self._elev.get(c)
-        if v is not None:
-            return v
-        self._misses.add(c)  # queue for background fetch
+        c = self._cell_of(lat, lon)                 # lower-left corner cell
+        c00, c10 = c, (c[0] + 1, c[1])
+        c01, c11 = (c[0], c[1] + 1), (c[0] + 1, c[1] + 1)
+        vals = [self._elev.get(k) for k in (c00, c10, c01, c11)]
+        if all(v is not None for v in vals):
+            lat0, lon0 = self._corner(c00)
+            u = (lat - lat0) / self._cell           # 0..1 across latitude
+            t = (lon - lon0) / self._cell           # 0..1 across longitude
+            v00, v10, v01, v11 = vals               # type: ignore[misc]
+            return ((1 - u) * (1 - t) * v00 + u * (1 - t) * v10
+                    + (1 - u) * t * v01 + u * t * v11)
+        # miss: queue the four corners; return nearest cached / fallback
+        for k in (c00, c10, c01, c11):
+            if self._elev.get(k) is None:
+                self._misses.add(k)
         if self._elev:
             nearest = min(self._elev.keys(),
                           key=lambda k: (k[0] - c[0]) ** 2 + (k[1] - c[1]) ** 2)
             return self._elev[nearest]
-        return -self._fallback  # fallback elevation => fallback depth
+        return -self._fallback
+
+    async def fetch_loop(self, interval: float = 1.1, batch: int = 100) -> None:
+        import asyncio
+        while True:
+            if self._misses:
+                cells = list(self._misses)[:batch]
+                pts = [self._corner(c) for c in cells]
+                try:
+                    elevs = await asyncio.to_thread(self._fetch, pts)
+                    for c, e in zip(cells, elevs):
+                        self._elev[c] = e
+                        self._misses.discard(c)
+                    self.save()
+                except Exception as exc:  # noqa: BLE001
+                    print(f"[geogrid] background fetch failed: {exc!r}", flush=True)  # noqa: T201
+            await asyncio.sleep(interval)
 
     def depth_at(self, lat: float, lon: float) -> float:
         return max(0.0, -self.elevation_at(lat, lon))
