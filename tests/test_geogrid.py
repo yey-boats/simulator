@@ -2,6 +2,11 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 from __future__ import annotations
 
+import asyncio
+from pathlib import Path
+
+import pytest  # type: ignore[import]
+
 from yey.boats.simulator.engine.geogrid import GeoGrid  # type: ignore[import]
 
 
@@ -36,12 +41,6 @@ def test_land_classification_positive_elevation():
     g.sample([(45.5, 13.5)])
     assert g.is_land(45.5, 13.5) is True
     assert g.depth_at(45.5, 13.5) == 0.0   # land => depth clamped to 0
-
-
-import asyncio
-from pathlib import Path
-
-import pytest  # type: ignore[import]
 
 
 def _plane_fetcher(points):
