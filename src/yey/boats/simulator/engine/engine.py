@@ -15,7 +15,7 @@ from typing import Any
 from yey.boats.simulator.engine.autopilot import Autopilot  # type: ignore[import]
 from yey.boats.simulator.engine.electrical import Electrical, solar_elevation_deg  # type: ignore[import]
 from yey.boats.simulator.engine.lights import LightsModel  # type: ignore[import]
-from yey.boats.simulator.engine.navigator import Navigator, NavState, engine_fuel_L_h  # type: ignore[import]
+from yey.boats.simulator.engine.navigator import Navigator, engine_fuel_L_h  # type: ignore[import]
 from yey.boats.simulator.engine.performance import polar_efficiency  # type: ignore[import]
 from yey.boats.simulator.engine.schedule import Schedule, SimState  # type: ignore[import]
 from yey.boats.simulator.engine.snapshot import TelemetrySnapshot  # type: ignore[import]
@@ -41,13 +41,13 @@ class EngineCommandSink:
 
 class Engine:
     def __init__(self, route: Any, polars: Any, data_source: Any, ais_source: Any,
-                 *, start_state: NavState) -> None:
+                 start_state: Any, grid: Any) -> None:
         self.route = route
         self.polars = polars
         self._data = data_source
         self._ais = ais_source
         self.sched = Schedule()
-        self.nav = Navigator(polars, self.sched, route._depth_profile)
+        self.nav = Navigator(polars, self.sched, grid)
         self.elec = Electrical(initial_soc=0.85)
         self.sys_ = Systems()
         self.lights = LightsModel()

@@ -66,8 +66,16 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
     if route is None:
         route = Route.load(resources.route_kmz(), resources.marinas_json())
 
-    print("[sim] fetching depth profile (may take ~30s first run)...", flush=True)
-    route.load_depth_profile(resources.depth_cache_path(settings.data_dir))
+    from yey.boats.simulator.engine.geogrid import GeoGrid  # type: ignore[import]
+    from yey.boats.simulator.engine.autoroute import AutorouteConfig  # type: ignore[import]
+
+    grid = GeoGrid(cache_path=resources.geogrid_cache_path(settings.data_dir))
+    route_cfg = AutorouteConfig(hard_min_m=settings.boat_draft_m + 1.0)
+    try:
+        inserted = route.autoroute_legs(grid, route_cfg)
+        print(f"[sim] autoroute inserted {inserted} navigable waypoints", flush=True)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[sim] autoroute failed (using planner legs): {exc!r}", flush=True)
     polars = Polars.load(resources.polar_csv())
 
     chain = build_sink_chain(settings)
@@ -121,7 +129,8 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
     else:
         ais_source = SyntheticAISSource(get_pos=get_pos)
 
-    engine = Engine(route, polars, data_source, ais_source, start_state=start_state)
+    engine = Engine(route, polars, data_source, ais_source,
+                    start_state=start_state, grid=grid)
     engine_ref["engine"] = engine
 
     async def drive():
@@ -135,7 +144,7 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
             report_status((engine.nav_state.lat, engine.nav_state.lon), connected)
             await asyncio.sleep(max(0, 1.0 - (time.monotonic() - t0)))
 
-    tasks = [drive(), ais_source.start()]
+    tasks = [drive(), ais_source.start(), grid.fetch_loop()]
     if writer is not None:
         cmd_src = SignalKCommandSource(
             settings.signalk_host, settings.signalk_port, writer.token,

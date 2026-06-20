@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from yey.boats.simulator.engine.polars import Polars  # type: ignore[import]
-from yey.boats.simulator.engine.route import haversine_nm, dead_reckon  # type: ignore[import]
+from yey.boats.simulator.engine.route import dead_reckon  # type: ignore[import]
 from yey.boats.simulator.engine.schedule import Schedule, SimState  # type: ignore[import]
 
 CURRENT_KTS   = 0.3
@@ -92,11 +92,10 @@ class NavState:
 
 
 class Navigator:
-    def __init__(self, polars: Polars, schedule: Schedule,
-                 depth_profile: list) -> None:
+    def __init__(self, polars: Polars, schedule: Schedule, grid) -> None:
         self._polars   = polars
         self._schedule = schedule
-        self._depth    = depth_profile
+        self._grid     = grid           # object exposing depth_at(lat,lon) -> D (m)
 
     def route_heading(self, state: NavState, wp_bearing: float,
                       tws_kts: float, twd_deg: float,
@@ -208,7 +207,4 @@ class Navigator:
         return dead_reckon(lat, lon, sog_kts, cog_deg, dt_s)
 
     def _depth_at(self, lat: float, lon: float) -> float:
-        if not self._depth:
-            return 50.0
-        best = min(self._depth, key=lambda p: haversine_nm(lat, lon, p["lat"], p["lon"]))
-        return best["depth_m"]
+        return self._grid.depth_at(lat, lon)   # depth below surface (m)

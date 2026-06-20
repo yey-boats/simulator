@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 from datetime import datetime, timezone
-from pathlib import Path
 
 import pytest  # type: ignore[import]
 
 from yey.boats.simulator import resources  # type: ignore[import]
 from yey.boats.simulator.engine.engine import Engine, EngineCommandSink  # type: ignore[import]
+from yey.boats.simulator.engine.geogrid import GeoGrid  # type: ignore[import]
 from yey.boats.simulator.engine.navigator import NavState  # type: ignore[import]
 from yey.boats.simulator.engine.polars import Polars  # type: ignore[import]
 from yey.boats.simulator.engine.route import Route  # type: ignore[import]
@@ -27,13 +27,13 @@ class FakeAIS:
 
 def _engine():
     route = Route.load(resources.route_kmz(), resources.marinas_json())
-    route.load_depth_profile(resources.depth_cache_path(Path("/tmp/yey-eng-test")))  # noqa: S108
     polars = Polars.load(resources.polar_csv())
     start = NavState(lat=route.current.lat, lon=route.current.lon,
                      hdg_deg=route.current.berth_heading, cog_deg=0, sog_kts=0,
                      stw_kts=0, twa_deg=0, tws_kts=0, twd_deg=0, awa_deg=0,
                      aws_kts=0, heel_deg=0, depth_m=10.0)
-    return Engine(route, polars, FakeData(), FakeAIS(), start_state=start)
+    grid = GeoGrid(fetcher=lambda pts: [-10.0 for _ in pts])
+    return Engine(route, polars, FakeData(), FakeAIS(), start_state=start, grid=grid)
 
 
 @pytest.mark.asyncio

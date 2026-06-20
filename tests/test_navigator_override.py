@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 from yey.boats.simulator import resources  # type: ignore[import]
+from yey.boats.simulator.engine.geogrid import GeoGrid  # type: ignore[import]
 from yey.boats.simulator.engine.navigator import Navigator, NavState  # type: ignore[import]
 from yey.boats.simulator.engine.schedule import SimState  # type: ignore[import]
 from yey.boats.simulator.engine.polars import Polars  # type: ignore[import]
@@ -9,7 +10,7 @@ POLAR = resources.polar_csv()
 
 
 def _nav():
-    return Navigator(Polars.load(POLAR), Schedule(), [])
+    return Navigator(Polars.load(POLAR), Schedule(), GeoGrid(fetcher=lambda pts: [-10.0 for _ in pts]))
 
 
 def _state(hdg=90.0):
