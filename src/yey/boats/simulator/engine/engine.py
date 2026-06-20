@@ -107,12 +107,19 @@ class Engine:
         self.sched.update_sailing_state(stw_candidate)
         eff = polar_efficiency(wx.wave_height_m, tws)
         route_hdg = self.nav.route_heading(self.nav_state, wp_brg, tws, twd, self.sched.state)
-        eff_hdg = self.autopilot.effective_heading(
+        commanded_hdg = self.autopilot.effective_heading(
             route_heading_deg=route_hdg, current_heading_deg=self.nav_state.hdg_deg, twd_deg=twd)
+        # Add the helm yaw-wander offset so the boat oscillates a few degrees
+        # around the commanded heading instead of holding it dead-flat. Real
+        # course changes flow through commanded_hdg and are preserved exactly.
+        eff_hdg = self.autopilot.steer(commanded_hdg, dt_s=1.0)
         prev_hdg = self.nav_state.hdg_deg
         self.nav_state = self.nav.tick(self.nav_state, wp_brg, tws, twd, self.sched.state,
                                        efficiency=eff, heading_override=eff_hdg)
-        self.autopilot.update_rudder(prev_hdg, self.nav_state.hdg_deg)
+        # Rudder reflects both the slew (turns) and the residual wander error the
+        # helm is correcting (commanded vs actually-held heading).
+        self.autopilot.update_rudder(prev_hdg, self.nav_state.hdg_deg,
+                                     commanded_hdg_deg=commanded_hdg)
 
         if self.sched.state == SimState.MOTORED:
             fuel_l = engine_fuel_L_h(self.nav_state.stw_kts) / 3600
