@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Tests for the firmware-screen values the sim now publishes:
 
-  - environment.depth.belowTransducer (= belowKeel + keel-to-transducer offset)
+  - environment.depth.belowTransducer (= depth-below-surface minus transducer depth, clamped ≥ 0)
+  - environment.depth.belowKeel (= depth-below-surface minus draft, clamped ≥ 0)
   - environment.water.temperature (Kelvin, plausible-range clamped)
   - navigation.courseRhumbline.{nextPoint.distance, nextPoint.bearingTrue,
     bearingTrackTrue, crossTrackError} — legacy v1 legs computed from route state
@@ -21,7 +22,7 @@ import pytest  # type: ignore[import]
 from yey.boats.simulator.engine.navigator import NavState  # type: ignore[import]
 from yey.boats.simulator.engine.schedule import SimState  # type: ignore[import]
 from yey.boats.simulator.engine.signalk_writer import (  # type: ignore[import]
-    KEEL_TO_TRANSDUCER_M, _build_vessel_delta)
+    _build_vessel_delta)
 from yey.boats.simulator.engine.snapshot import TelemetrySnapshot  # type: ignore[import]
 from yey.boats.simulator.sinks.signalk import SignalKSink  # type: ignore[import]
 
@@ -110,14 +111,18 @@ def _delta(*, nav: NavState | None = None, wx_temp_c: float = 20.0,
 # Depth below transducer
 # ---------------------------------------------------------------------------
 
-def test_depth_below_transducer_offset_from_keel():
+def test_depth_emissions_derived_from_depth_below_surface():
+    # D below surface = 12 m, draft 2.2, transducer 0.6
     p = _paths(_delta(nav=_nav(depth_m=12.0)))
-    assert "environment.depth.belowKeel" in p  # noqa: S101
-    assert "environment.depth.belowTransducer" in p  # noqa: S101
-    assert p["environment.depth.belowKeel"] == 12.0  # noqa: S101
-    # Transducer sits above the keel → it reads deeper water by the offset.
-    assert p["environment.depth.belowTransducer"] == pytest.approx(  # noqa: S101
-        12.0 + KEEL_TO_TRANSDUCER_M)
+    assert p["environment.depth.belowKeel"] == pytest.approx(12.0 - 2.2)  # noqa: S101
+    assert p["environment.depth.belowTransducer"] == pytest.approx(12.0 - 0.6)  # noqa: S101
+
+
+def test_depth_emissions_clamped_non_negative():
+    # Shallow mooring: D = 1.0 m < draft -> belowKeel clamps to 0.
+    p = _paths(_delta(nav=_nav(depth_m=1.0)))
+    assert p["environment.depth.belowKeel"] == 0.0  # noqa: S101
+    assert p["environment.depth.belowTransducer"] == pytest.approx(max(0.0, 1.0 - 0.6))  # noqa: S101
 
 
 # ---------------------------------------------------------------------------

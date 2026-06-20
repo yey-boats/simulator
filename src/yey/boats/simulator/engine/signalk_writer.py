@@ -21,11 +21,11 @@ MS_TO_KTS    = 1.94384
 BATTERY_WH_J = 14400 * 3600   # 1200 Ah × 12 V, in joules
 EARTH_R_M    = 6371000.0      # mean earth radius, metres (for cross-track)
 
-# Vertical distance from the depth transducer (hull-mounted, near the
-# waterline) down to the bottom of the keel. environment.depth.belowKeel +
-# this offset = environment.depth.belowTransducer (Beneteau O45: ~2.2 m draft,
-# transducer ~0.6 m below the waterline → ~1.5 m of keel below the transducer).
-KEEL_TO_TRANSDUCER_M = 1.5
+# Boat vertical geometry (Beneteau O45): keel bottom 2.2 m below the
+# waterline, depth transducer ~0.6 m below it. GEBCO gives depth below the
+# surface D; the two reported depths derive from it.
+DRAFT_M = 2.2
+TRANSDUCER_DEPTH_M = 0.6
 
 # ──────────────────────────────────────────────────────────────────────────────
 # SignalK metadata — sent once at startup via PUT to /api/vessels/self/{path}/meta
@@ -554,9 +554,9 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
         _v("environment.wind.speedApparent",  nav.aws_kts * 0.514444),
         _v("environment.wind.angleTrueWater", math.radians(nav.twa_deg)),
         _v("environment.wind.speedTrue",      nav.tws_kts * 0.514444),
-        # Environment
-        _v("environment.depth.belowKeel",       nav.depth_m),
-        _v("environment.depth.belowTransducer", nav.depth_m + KEEL_TO_TRANSDUCER_M),
+        # Depth — nav.depth_m is depth below surface (D), from the GeoGrid.
+        _v("environment.depth.belowKeel",       max(0.0, nav.depth_m - DRAFT_M)),
+        _v("environment.depth.belowTransducer", max(0.0, nav.depth_m - TRANSDUCER_DEPTH_M)),
         # Sea water temp: stable, a touch cooler than 2 m air, plausible range.
         _v("environment.water.temperature",
            min(max(wx.temp_c - 1.5, 10.0), 28.0) + 273.15),
