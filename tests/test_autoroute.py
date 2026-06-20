@@ -26,6 +26,9 @@ def test_depth_penalty_bands():
     assert depth_penalty(4.0, cfg) == 25.0           # 3.2-5
     assert depth_penalty(7.0, cfg) == 5.0            # 5-10
     assert depth_penalty(20.0, cfg) == 1.0           # >= prefer
+    assert depth_penalty(3.2, cfg) == 25.0           # exactly hard_min -> necessary band
+    assert depth_penalty(5.0, cfg) == 5.0            # exactly soft_min -> tolerated band
+    assert depth_penalty(10.0, cfg) == 1.0           # exactly prefer -> preferred band
 
 
 def test_straight_leg_when_all_deep():
@@ -51,3 +54,24 @@ def test_fallback_to_straight_on_node_cap():
     a, b = (45.0, 12.95), (45.0, 13.10)
     path = autoroute_leg(g, a, b, cfg)
     assert path == [a, b]                             # logged + straight fallback
+
+
+def test_shallow_goal_endpoint_is_still_reached():
+    def fetcher(points):
+        out = []
+        for lat, lon in points:
+            # goal area (lon >= 13.09) shallow 2 m; everywhere else deep 50 m
+            out.append(-2.0 if lon >= 13.09 else -50.0)
+        return out
+    g = GeoGrid(fetcher=fetcher, cell_deg=0.02)
+    a, b = (45.0, 12.95), (45.0, 13.10)
+    path = autoroute_leg(g, a, b, AutorouteConfig())
+    assert path[-1] == b            # goal connected, not straight-leg fallback masking failure
+
+
+def test_fallback_on_bbox_cap():
+    g = GeoGrid(fetcher=_barrier_fetcher, cell_deg=0.02)
+    cfg = AutorouteConfig(max_cells=1)               # bbox too large -> straight fallback
+    a, b = (45.0, 12.95), (45.0, 13.10)
+    path = autoroute_leg(g, a, b, cfg)
+    assert path == [a, b]                             # bbox cap -> straight leg

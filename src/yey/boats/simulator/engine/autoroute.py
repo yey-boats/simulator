@@ -90,6 +90,8 @@ def autoroute_leg(grid: GeoGrid, a: tuple[float, float], b: tuple[float, float],
         return grid.depth_at(lat, lon) >= cfg.hard_min_m
 
     def step_cost(c) -> float:
+        if c in (start, goal):
+            return 1.0             # endpoint cells always crossable
         lat, lon = center(c)
         return depth_penalty(grid.depth_at(lat, lon), cfg)
 
