@@ -22,7 +22,16 @@ from yey.boats.simulator.engine.geogrid import GeoGrid  # type: ignore[import]
 from yey.boats.simulator.engine.navigator import NavState  # type: ignore[import]
 from yey.boats.simulator.engine.polars import Polars  # type: ignore[import]
 from yey.boats.simulator.engine.route import Route  # type: ignore[import]
-from yey.boats.simulator.engine.weather import DEFAULT_WEATHER  # type: ignore[import]
+from yey.boats.simulator.engine.schedule import SimState  # type: ignore[import]
+from yey.boats.simulator.engine.weather import DEFAULT_WEATHER, WeatherPoint  # type: ignore[import]
+
+# Dead-calm weather: with no wind the boat motors a dead-straight leg (no
+# tacking, no sampled-wind jitter), which is exactly the "long straight route
+# leg" the live lab scenario sits on. Used by the route-following test so the
+# only heading movement is the helm wander we want to assert on.
+_CALM = WeatherPoint(tws_ms=0.0, twd_deg=0.0, gust_ms=0.0, cloud_cover=0.2,
+                     wave_height_m=0.0, wave_period_s=0.0, wave_dir_deg=0.0,
+                     temp_c=20.0, pressure_pa=101325.0, humidity=0.6)
 
 
 class _FakeData:
@@ -34,6 +43,14 @@ class _FakeData:
 
     async def mean_tws_next_6h(self, lat, lon, now):
         return DEFAULT_WEATHER.sample()[0]
+
+
+class _CalmData(_FakeData):
+    async def get_weather(self, lat, lon, now):  # noqa: D401
+        return _CALM
+
+    async def mean_tws_next_6h(self, lat, lon, now):
+        return 0.0
 
 
 class _FakeAIS:
@@ -114,3 +131,62 @@ async def test_holding_course_heading_wanders_and_rudder_works():
     # (b) Rudder is actively working (non-zero) and bounded to a realistic max.
     assert any(abs(r) > 0.2 for r in rudders), "rudder never moves while holding"
     assert all(abs(r) <= Autopilot.MAX_RUDDER_DEG for r in rudders), "rudder exceeded max"
+
+
+@pytest.mark.asyncio
+async def test_route_following_leg_heading_wanders_and_rudder_works():
+    """Route-following (NOT autopilot-hold) must also yaw + work the rudder.
+
+    The live lab scenario follows a multi-leg route. In that mode the heading
+    comes from the leg bearing, not an AP target heading, so it used to emit a
+    dead-flat ``navigation.headingTrue`` and an exactly-zero ``steering.rudderAngle``
+    on a long straight leg (the firmware HDG read "stuck"). The wander/rudder
+    realism must ride on the *final emitted* heading in route mode too — the
+    offset rides on top of the leg bearing, so real course changes between legs
+    are still preserved exactly.
+    """
+    eng = _engine()
+    # Dead-calm wind so the boat motors a dead-straight leg (the commanded leg
+    # heading is constant) — isolates the helm wander as the only heading motion.
+    eng._data = _CalmData()
+    # No autopilot command: default state is engaged in ROUTE mode. Pin the
+    # underway state so the boat is actively steering a leg (not still moored).
+    eng.sched.state = SimState.MOTORED
+    assert eng.autopilot.state.mode == "route", "fixture must follow the route"
+    now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=timezone.utc)
+
+    headings = []
+    rudders = []
+    commanded = []
+    for i in range(60):
+        snap = await eng.tick(now + timedelta(seconds=i))
+        # Re-pin MOTORED: update_sailing_state would otherwise be a no-op here
+        # (no wind → no sailing), but keep it explicit so the leg stays straight.
+        eng.sched.state = SimState.MOTORED
+        headings.append(snap.nav.hdg_deg)
+        rudders.append(eng.autopilot.state.rudder_deg)
+        # The commanded (pre-wander) leg heading the helm is trying to hold.
+        commanded.append(eng.nav.route_heading(
+            eng.nav_state, eng.route.bearing_to_next(eng.nav_state.lat, eng.nav_state.lon),
+            0.0, 0.0, eng.sched.state))
+
+    # (a) Emitted heading is NOT frozen on the leg — it wanders a few degrees.
+    spread = max(headings) - min(headings)
+    assert spread > 0.5, f"route-leg heading appears frozen (spread={spread:.3f}deg)"
+    assert spread < 20.0, f"route-leg heading wander is unrealistically large ({spread:.3f}deg)"
+
+    # (b) Rudder is non-zero (helm correcting the wander) and bounded.
+    assert any(abs(r) > 0.2 for r in rudders), "rudder never moves while following a route"
+    assert all(abs(r) <= Autopilot.MAX_RUDDER_DEG for r in rudders), "rudder exceeded max"
+    # It is not pinned at exactly zero for the whole leg (the original bug).
+    assert any(r != 0.0 for r in rudders), "rudder stayed exactly zero on the route leg"
+
+    # (c) The wander is an OFFSET on the leg bearing, not a replacement: each
+    # emitted heading stays within the analytic wander envelope of the
+    # commanded leg heading, so real course changes between legs are preserved.
+    bound = WANDER_AMP1_DEG + WANDER_AMP2_DEG + WANDER_RIPPLE_DEG + 1e-6
+    for emitted, cmd in zip(headings, commanded):
+        offset = ((emitted - cmd + 180) % 360) - 180
+        assert abs(offset) <= bound, (
+            f"emitted heading {emitted:.3f} strayed beyond the wander envelope "
+            f"of leg bearing {cmd:.3f} (offset {offset:.3f}deg)")
