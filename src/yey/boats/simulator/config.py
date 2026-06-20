@@ -24,6 +24,9 @@ class Settings:
     weather_source: str = "openmeteo"  # openmeteo | signalk
     failover: bool = True
     data_dir: Path = field(default_factory=lambda: _DEFAULT_DATA_DIR)
+    # Boat geometry (depth derivations + routing draft floor)
+    boat_draft_m: float = 2.2
+    transducer_depth_m: float = 0.6
 
     _PERSIST_KEYS = ("signalk_host", "signalk_port", "signalk_username",
                      "signalk_password", "aisstream_api_key", "sink",

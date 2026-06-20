@@ -80,3 +80,10 @@ async def test_fetch_loop_drains_misses():
     task.cancel()
     assert not g._misses
     assert g.depth_at(45.0, 13.0) == 20.0
+
+
+def test_geogrid_cache_path(tmp_path):
+    from yey.boats.simulator import resources  # type: ignore[import]
+    p = resources.geogrid_cache_path(tmp_path)
+    assert p == tmp_path / "geogrid.json"
+    assert tmp_path.exists()

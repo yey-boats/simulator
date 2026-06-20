@@ -32,3 +32,10 @@ def test_explicit_overrides_env(monkeypatch):
     monkeypatch.setenv("SINK", "signalk")
     s = Settings.from_env(sink="stdout")
     assert s.sink == "stdout"  # noqa: S101
+
+
+def test_settings_has_boat_geometry_defaults():
+    from yey.boats.simulator.config import Settings  # type: ignore[import]
+    s = Settings()
+    assert s.boat_draft_m == 2.2
+    assert s.transducer_depth_m == 0.6

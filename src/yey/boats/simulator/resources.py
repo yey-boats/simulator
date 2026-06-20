@@ -46,3 +46,10 @@ def depth_cache_path(data_dir: Path) -> Path:
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir / "depth_profile.json"
+
+
+def geogrid_cache_path(data_dir: Path) -> Path:
+    """Path to the lazily-built GEBCO grid cache inside the writable data dir."""
+    data_dir = Path(data_dir)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir / "geogrid.json"
