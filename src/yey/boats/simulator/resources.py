@@ -53,3 +53,10 @@ def geogrid_cache_path(data_dir: Path) -> Path:
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir / "geogrid.json"
+
+
+def autoroute_cache_path(data_dir: Path) -> Path:
+    """Path to the persisted expanded (autorouted) route inside the data dir."""
+    data_dir = Path(data_dir)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir / "route_autorouted.json"

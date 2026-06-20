@@ -5,6 +5,7 @@ from __future__ import annotations
 from yey.boats.simulator.engine.geogrid import GeoGrid  # type: ignore[import]
 from yey.boats.simulator.engine.autoroute import (  # type: ignore[import]
     AutorouteConfig, autoroute_leg, depth_penalty)
+from yey.boats.simulator.engine.route import Route, Waypoint  # type: ignore[import]
 
 
 def _barrier_fetcher(points):
@@ -112,9 +113,6 @@ def test_fallback_on_bbox_cap():
     assert path == [a, b]                             # bbox cap -> straight leg
 
 
-from yey.boats.simulator.engine.route import Route, Waypoint  # type: ignore[import]  # noqa: E402
-
-
 def _two_wp_route(a, b):
     r = Route(waypoints=[
         Waypoint(name="A", lat=a[0], lon=a[1], marina="", berth_heading=0.0,
@@ -134,3 +132,65 @@ def test_autoroute_legs_inserts_interior_points_around_land():
     assert names[0] == "A" and names[-1] == "B"          # endpoints preserved
     for w in r.waypoints:
         assert not g.is_land(w.lat, w.lon)               # all navigable
+
+
+# ---------------------------------------------------------------------------
+# Background-autoroute support: pure expansion + persisted-route cache
+# ---------------------------------------------------------------------------
+
+def test_expand_waypoints_is_pure_does_not_mutate_input():
+    g = GeoGrid(fetcher=_barrier_fetcher, cell_deg=0.02)
+    r = _two_wp_route((45.0, 12.95), (45.0, 13.10))
+    planner = list(r.waypoints)
+    before = [(w.name, w.lat, w.lon) for w in planner]
+    out = Route.expand_waypoints(planner, g, AutorouteConfig())
+    # input list and its waypoints are untouched (safe to run in a thread)
+    assert [(w.name, w.lat, w.lon) for w in planner] == before  # noqa: S101
+    assert len(out) >= len(planner)  # noqa: S101
+    assert out[0].name == "A" and out[-1].name == "B"  # noqa: S101
+    for w in out:
+        assert not g.is_land(w.lat, w.lon)  # noqa: S101
+
+
+def test_autoroute_legs_still_mutates_in_place():
+    g = GeoGrid(fetcher=_barrier_fetcher, cell_deg=0.02)
+    r = _two_wp_route((45.0, 12.95), (45.0, 13.10))
+    inserted = r.autoroute_legs(g, AutorouteConfig())
+    assert inserted >= 1  # noqa: S101
+    assert r.waypoints[0].name == "A" and r.waypoints[-1].name == "B"  # noqa: S101
+
+
+def test_expanded_route_cache_round_trip_preserves_metadata(tmp_path):
+    r = _two_wp_route((45.0, 12.95), (45.0, 13.10))
+    r.waypoints[-1].marina = "Test Marina"
+    r.waypoints[-1].refill_fuel = True
+    fp = r.planner_fingerprint()
+    sig = [3.2, 5.0, 10.0, 0.3]
+    path = tmp_path / "route_autorouted.json"
+    r.save_expanded_route(path, fp, sig)
+
+    loaded = Route.load_expanded_waypoints(path, fp, sig)
+    assert loaded is not None  # noqa: S101
+    wps = Route.waypoints_from_full_dicts(loaded)
+    assert wps[-1].marina == "Test Marina"  # noqa: S101 — metadata survives
+    assert wps[-1].refill_fuel is True  # noqa: S101
+
+
+def test_expanded_route_cache_invalidation(tmp_path):
+    r = _two_wp_route((45.0, 12.95), (45.0, 13.10))
+    fp = r.planner_fingerprint()
+    sig = [3.2, 5.0, 10.0, 0.3]
+    path = tmp_path / "route_autorouted.json"
+    r.save_expanded_route(path, fp, sig)
+    # wrong fingerprint, wrong cfg, and missing file all yield None
+    assert Route.load_expanded_waypoints(path, "deadbeefdeadbeef", sig) is None  # noqa: S101
+    assert Route.load_expanded_waypoints(path, fp, [9.9, 5.0, 10.0, 0.3]) is None  # noqa: S101
+    assert Route.load_expanded_waypoints(tmp_path / "nope.json", fp, sig) is None  # noqa: S101
+
+
+def test_planner_fingerprint_stable_and_sensitive():
+    a, b = (45.0, 12.95), (45.0, 13.10)
+    assert _two_wp_route(a, b).planner_fingerprint() == \
+        _two_wp_route(a, b).planner_fingerprint()  # noqa: S101 — deterministic
+    assert _two_wp_route(a, b).planner_fingerprint() != \
+        _two_wp_route(a, (45.0, 13.11)).planner_fingerprint()  # noqa: S101 — sensitive

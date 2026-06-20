@@ -152,15 +152,16 @@ class Route:
                 for w in valid]
         return cls(waypoints=objs)
 
-    def autoroute_legs(self, grid, cfg) -> int:
-        """Replace each straight planner leg with a navigable polyline that
-        avoids land/shallow water. Planner waypoints are preserved as vertices;
-        interior points are inserted as synthetic ('auto') waypoints. Returns
-        the count of inserted interior points."""
+    @staticmethod
+    def expand_waypoints(planner: list, grid, cfg) -> list:
+        """PURE: given a planner waypoint list, return a new navigable waypoint
+        list (planner vertices preserved, interior 'auto' points inserted to
+        avoid land/shallow water). Does NOT mutate `planner` or `self`, so it is
+        safe to run in a worker thread against a private grid while the engine
+        keeps reading the live route on the event loop. Only touches `grid`."""
         from yey.boats.simulator.engine.autoroute import autoroute_leg
-        if len(self.waypoints) < 2:
-            return 0
-        planner = list(self.waypoints)
+        if len(planner) < 2:
+            return list(planner)
         out: list = [planner[0]]
         inserted = 0
         for i in range(len(planner) - 1):
@@ -173,8 +174,65 @@ class Route:
                                     refill_fuel=False, pump_out_bw=False))
                 inserted += 1
             out.append(b)                                # keep planner endpoint
-        self.waypoints = out
-        return inserted
+        return out
+
+    def autoroute_legs(self, grid, cfg) -> int:
+        """Replace each straight planner leg with a navigable polyline in place.
+        Returns the count of inserted interior points. Thin wrapper over the
+        pure `expand_waypoints` for inline/test use."""
+        before = len(self.waypoints)
+        self.waypoints = Route.expand_waypoints(list(self.waypoints), grid, cfg)
+        return len(self.waypoints) - before
+
+    def planner_fingerprint(self) -> str:
+        """Stable short hash of the current waypoint identities (name+position),
+        used to invalidate a persisted expanded route when the planner changes."""
+        import hashlib
+        key = ";".join(f"{w.name}:{w.lat:.5f},{w.lon:.5f}" for w in self.waypoints)
+        return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+    @staticmethod
+    def _wp_full_dict(w) -> dict:
+        return {"name": w.name, "lat": w.lat, "lon": w.lon, "marina": w.marina,
+                "berth_heading": w.berth_heading, "refill_water": w.refill_water,
+                "refill_fuel": w.refill_fuel, "pump_out_bw": w.pump_out_bw}
+
+    @staticmethod
+    def waypoints_from_full_dicts(dicts: list) -> list:
+        """Rebuild full Waypoint objects (all fields, incl. marina/refill flags)
+        from dicts produced by `save_expanded_route`."""
+        return [Waypoint(name=w["name"], lat=w["lat"], lon=w["lon"],
+                         marina=w.get("marina", ""),
+                         berth_heading=w.get("berth_heading", 0.0),
+                         refill_water=w.get("refill_water", False),
+                         refill_fuel=w.get("refill_fuel", False),
+                         pump_out_bw=w.get("pump_out_bw", False))
+                for w in dicts]
+
+    def save_expanded_route(self, path, fingerprint: str, cfg_sig: list) -> None:
+        """Persist this (already-expanded) route keyed by the planner fingerprint
+        and routing-config signature, so a later boot can skip recomputation.
+        Stores all waypoint fields so marina/refill metadata survives the cache."""
+        p = pathlib.Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        wps = [Route._wp_full_dict(w) for w in self.waypoints]
+        p.write_text(json.dumps({"fingerprint": fingerprint, "cfg": cfg_sig,
+                                 "waypoints": wps}))
+
+    @staticmethod
+    def load_expanded_waypoints(path, fingerprint: str, cfg_sig: list):
+        """Return the cached expanded waypoint dicts if the cache exists and its
+        fingerprint + cfg signature match; else None (recompute needed)."""
+        p = pathlib.Path(path)
+        if not p.exists():
+            return None
+        try:
+            d = json.loads(p.read_text())
+        except (OSError, ValueError):
+            return None
+        if d.get("fingerprint") == fingerprint and d.get("cfg") == cfg_sig:
+            return d.get("waypoints")
+        return None
 
     def save_json(self, path) -> None:
         import json

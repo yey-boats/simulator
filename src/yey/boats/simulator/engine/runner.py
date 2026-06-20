@@ -66,16 +66,28 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
     if route is None:
         route = Route.load(resources.route_kmz(), resources.marinas_json())
 
-    from yey.boats.simulator.engine.geogrid import GeoGrid  # type: ignore[import]
+    from yey.boats.simulator.engine.geogrid import GeoGrid, _opentopo_fetch  # type: ignore[import]
     from yey.boats.simulator.engine.autoroute import AutorouteConfig  # type: ignore[import]
 
     grid = GeoGrid(cache_path=resources.geogrid_cache_path(settings.data_dir))
     route_cfg = AutorouteConfig(hard_min_m=settings.boat_draft_m + 1.0)
-    try:
-        inserted = route.autoroute_legs(grid, route_cfg)
-        print(f"[sim] autoroute inserted {inserted} navigable waypoints", flush=True)
-    except Exception as exc:  # noqa: BLE001
-        print(f"[sim] autoroute failed (using planner legs): {exc!r}", flush=True)
+    # Autoroute is NOT run inline: it can fetch a lot of GEBCO and would stall
+    # startup. Reuse a persisted expanded route when the planner+cfg are
+    # unchanged (instant); otherwise the engine starts on the planner legs and a
+    # background task computes the navigable legs, then swaps them in.
+    autoroute_fp = route.planner_fingerprint()
+    autoroute_cfg_sig = [route_cfg.hard_min_m, route_cfg.soft_min_m,
+                         route_cfg.prefer_m, route_cfg.bbox_margin_deg]
+    autoroute_cache = resources.autoroute_cache_path(settings.data_dir)
+    cached_wps = Route.load_expanded_waypoints(autoroute_cache, autoroute_fp, autoroute_cfg_sig)
+    autoroute_needed = cached_wps is None
+    if cached_wps is not None:
+        route.waypoints = Route.waypoints_from_full_dicts(cached_wps)
+        print(f"[sim] autoroute: loaded cached expanded route ({len(route.waypoints)} wp)",
+              flush=True)
+    else:
+        print("[sim] autoroute: computing in background (engine starts on planner legs)",
+              flush=True)
     polars = Polars.load(resources.polar_csv())
 
     chain = build_sink_chain(settings)
@@ -144,7 +156,42 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
             report_status((engine.nav_state.lat, engine.nav_state.lon), connected)
             await asyncio.sleep(max(0, 1.0 - (time.monotonic() - t0)))
 
+    async def autoroute_bg():
+        """Compute navigable legs off the startup path. Runs the pure expansion
+        in a worker thread against a PRIVATE in-memory grid (no shared state with
+        the live depth grid), then swaps the result in + re-resyncs + persists on
+        the event loop (race-free between ticks). On any failure (e.g. GEBCO 429)
+        it keeps the planner legs and does not persist, so a later boot retries."""
+        planner_snapshot = list(route.waypoints)
+        rgrid = GeoGrid(fetcher=_opentopo_fetch)  # private, in-memory
+        try:
+            new_wps = await asyncio.to_thread(
+                Route.expand_waypoints, planner_snapshot, rgrid, route_cfg)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[sim] autoroute background failed (keeping planner legs): {exc!r}",
+                  flush=True)
+            return
+        inserted = len(new_wps) - len(planner_snapshot)
+        route.waypoints = new_wps
+        route.resync_from_position(engine.nav_state.lat, engine.nav_state.lon)
+        try:
+            route.save_expanded_route(autoroute_cache, autoroute_fp, autoroute_cfg_sig)
+        except OSError as exc:
+            print(f"[sim] autoroute cache write failed (non-fatal): {exc!r}", flush=True)
+        print(f"[sim] autoroute: applied {inserted} navigable waypoints (background)",
+              flush=True)
+        if writer is not None:
+            try:
+                await writer.put_route_resource(ROUTE_UUID, _route_to_geojson(route))
+                await writer.put_active_route(
+                    ROUTE_UUID, (route.current_index + 1) % len(route.waypoints))
+            except Exception as exc:  # noqa: BLE001
+                print(f"[sim] autoroute route re-upload failed (non-fatal): {exc!r}",
+                      flush=True)
+
     tasks = [drive(), ais_source.start(), grid.fetch_loop()]
+    if autoroute_needed:
+        tasks.append(autoroute_bg())
     if writer is not None:
         cmd_src = SignalKCommandSource(
             settings.signalk_host, settings.signalk_port, writer.token,
