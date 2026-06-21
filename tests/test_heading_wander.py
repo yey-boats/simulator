@@ -131,6 +131,12 @@ async def test_holding_course_heading_wanders_and_rudder_works():
     eng.submit_command("set_heading", 100.0)
     now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=timezone.utc)
 
+    # Heading is turn-rate limited, so first let it slew from the start heading
+    # onto the commanded course; then measure the steady-state wander.
+    for i in range(40):
+        await eng.tick(now + timedelta(seconds=i))
+    now = now + timedelta(seconds=40)
+
     headings = []
     rudders = []
     for i in range(60):
@@ -169,6 +175,13 @@ async def test_route_following_leg_heading_wanders_and_rudder_works():
     eng.sched.state = SimState.MOTORED
     assert eng.autopilot.state.mode == "route", "fixture must follow the route"
     now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=timezone.utc)
+
+    # Heading is turn-rate limited: settle onto the leg bearing first, then
+    # measure the steady-state wander.
+    for i in range(40):
+        await eng.tick(now + timedelta(seconds=i))
+        eng.sched.state = SimState.MOTORED
+    now = now + timedelta(seconds=40)
 
     headings = []
     rudders = []
@@ -227,6 +240,12 @@ async def test_emitted_heading_wanders_and_rudder_nonzero_in_auto_hold():
     target_rad = 0.6513
     eng.submit_command("set_heading", math.degrees(target_rad))
     now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=timezone.utc)
+
+    # Heading is turn-rate limited: settle onto the AP target first, then measure
+    # the steady-state wander on the wire.
+    for i in range(40):
+        await eng.tick(now + timedelta(seconds=i))
+    now = now + timedelta(seconds=40)
 
     emitted_hdg_rad = []
     emitted_rudder_rad = []

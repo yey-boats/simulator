@@ -41,6 +41,21 @@ def _normalise_angle(deg: float) -> float:
     return ((deg + 180) % 360) - 180
 
 
+# Max rate the boat can swing its heading. A tack/gybe (~90-115 deg) then slews
+# over ~12-15 s instead of snapping in a single tick — without this the emitted
+# navigation.headingTrue (and apparent wind) jumps ~100 deg instantly when the
+# boat tacks upwind, which reads as a glitch / "two states" on the instruments.
+MAX_TURN_RATE_DEG_S = 8.0
+
+
+def _slew_heading(cur_deg: float, target_deg: float, max_step_deg: float) -> float:
+    """Move `cur_deg` toward `target_deg` by at most `max_step_deg`, the short way."""
+    diff = _normalise_angle(target_deg - cur_deg)      # shortest signed turn
+    if abs(diff) <= max_step_deg:
+        return _norm360(target_deg)
+    return _norm360(cur_deg + math.copysign(max_step_deg, diff))
+
+
 def _apparent_wind(stw_kts: float, hdg_deg: float,
                    tws_kts: float, twd_deg: float) -> tuple[float, float]:
     """Return (AWS kts, AWA degrees). AWA: + = starboard, - = port.
@@ -122,12 +137,18 @@ class Navigator:
         # reaches nav_state.hdg_deg (and thus the emitted delta) in every mode.
         # See test_heading_wander.py::test_emitted_heading_wanders_and_rudder_*.
         if heading_override is not None:
-            hdg = heading_override
+            target_hdg = heading_override
         elif sim_state == SimState.MOTORED:
-            hdg = wp_bearing
+            target_hdg = wp_bearing
         else:
-            hdg = self.sail_heading(state.lat, state.lon, wp_bearing,
-                                    twd_deg, tws_kts)
+            target_hdg = self.sail_heading(state.lat, state.lon, wp_bearing,
+                                           twd_deg, tws_kts)
+
+        # Limit the turn rate: a tack/gybe or a waypoint change slews toward the
+        # target over a few seconds instead of snapping the heading (and apparent
+        # wind) ~100 deg in one tick. The wander (a few deg) passes through
+        # unchanged since it is well under the per-tick cap.
+        hdg = _slew_heading(state.hdg_deg, target_hdg, MAX_TURN_RATE_DEG_S * dt_s)
 
         # Speed is derived from the now-final heading. MOTORED is RPM-driven
         # (Volvo D4-55 at 2200 RPM cruise, unaffected by sea state); under sail
