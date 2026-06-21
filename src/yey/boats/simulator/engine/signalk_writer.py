@@ -15,17 +15,18 @@ from yey.boats.simulator.engine.systems import SystemsState  # type: ignore[impo
 from yey.boats.simulator.engine.lights import LightsState  # type: ignore[import]
 from yey.boats.simulator.engine.schedule import SimState  # type: ignore[import]
 from yey.boats.simulator.engine.weather import WeatherPoint  # type: ignore[import]
+from yey.boats.simulator.config import DEFAULT_BOAT_DRAFT_M, DEFAULT_TRANSDUCER_DEPTH_M  # type: ignore[import]
 
 SELF_MMSI    = "235177007"
 MS_TO_KTS    = 1.94384
 BATTERY_WH_J = 14400 * 3600   # 1200 Ah × 12 V, in joules
 EARTH_R_M    = 6371000.0      # mean earth radius, metres (for cross-track)
 
-# Boat vertical geometry (Beneteau O45): keel bottom 2.2 m below the
-# waterline, depth transducer ~0.6 m below it. GEBCO gives depth below the
-# surface D; the two reported depths derive from it.
-DRAFT_M = 2.2
-TRANSDUCER_DEPTH_M = 0.6
+# Boat vertical geometry — single source of truth in config. GEBCO gives depth
+# below the surface D; the two reported depths derive from it (D - draft and
+# D - transducer depth).
+DRAFT_M = DEFAULT_BOAT_DRAFT_M
+TRANSDUCER_DEPTH_M = DEFAULT_TRANSDUCER_DEPTH_M
 
 # ──────────────────────────────────────────────────────────────────────────────
 # SignalK metadata — sent once at startup via PUT to /api/vessels/self/{path}/meta

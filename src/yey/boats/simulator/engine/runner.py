@@ -77,8 +77,13 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
     # bathymetry source (GEOGRID_API_URL → deploy/bathy-server) can route the
     # long, island-threading Adriatic legs with larger caps.
     _def = AutorouteConfig()
+    # Keep the depth bands monotonic (hard_min < soft_min < prefer) even for a
+    # deep-draft boat where hard_min = draft+1 could exceed the defaults.
+    _hard = settings.boat_draft_m + 1.0
+    _soft = max(_def.soft_min_m, _hard + 1.0)
+    _prefer = max(_def.prefer_m, _soft + 1.0)
     route_cfg = AutorouteConfig(
-        hard_min_m=settings.boat_draft_m + 1.0,
+        hard_min_m=_hard, soft_min_m=_soft, prefer_m=_prefer,
         bbox_margin_deg=float(os.environ.get("AUTOROUTE_BBOX_MARGIN_DEG", _def.bbox_margin_deg)),
         max_cells=int(os.environ.get("AUTOROUTE_MAX_CELLS", _def.max_cells)),
         max_nodes=int(os.environ.get("AUTOROUTE_MAX_NODES", _def.max_nodes)),

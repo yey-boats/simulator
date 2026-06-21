@@ -12,6 +12,12 @@ from pathlib import Path
 
 _DEFAULT_DATA_DIR = Path(os.environ.get("DATA_DIR", "./run-data")).resolve()
 
+# Boat vertical geometry (Beneteau O45): keel bottom below the waterline, and
+# the depth transducer below it. Single source of truth — the SignalK writer
+# imports these for its belowKeel/belowTransducer derivation.
+DEFAULT_BOAT_DRAFT_M = 2.2
+DEFAULT_TRANSDUCER_DEPTH_M = 0.6
+
 
 @dataclass
 class Settings:
@@ -25,8 +31,8 @@ class Settings:
     failover: bool = True
     data_dir: Path = field(default_factory=lambda: _DEFAULT_DATA_DIR)
     # Boat geometry (depth derivations + routing draft floor)
-    boat_draft_m: float = 2.2
-    transducer_depth_m: float = 0.6
+    boat_draft_m: float = DEFAULT_BOAT_DRAFT_M
+    transducer_depth_m: float = DEFAULT_TRANSDUCER_DEPTH_M
 
     _PERSIST_KEYS = ("signalk_host", "signalk_port", "signalk_username",
                      "signalk_password", "aisstream_api_key", "sink",

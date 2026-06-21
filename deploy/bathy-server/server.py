@@ -117,17 +117,14 @@ GRID: dict[str, float] = {}
 
 def _lookup(lat: float, lon: float):
     i, j = _cell(lat, lon)
-    # exact cell, else nearest of the 8 neighbours that exist (coast edges)
-    v = GRID.get(f"{i},{j}")
-    if v is not None:
-        return v
-    best = None
-    for di in (-1, 0, 1):
-        for dj in (-1, 0, 1):
-            nv = GRID.get(f"{i + di},{j + dj}")
-            if nv is not None:
-                best = nv if best is None else best
-    return best
+    # Exact cell, else the NEAREST existing neighbour (orthogonal before
+    # diagonal) — for coast/grid edges where the exact cell is missing.
+    for di, dj in ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1),
+                   (-1, -1), (-1, 1), (1, -1), (1, 1)):
+        nv = GRID.get(f"{i + di},{j + dj}")
+        if nv is not None:
+            return nv
+    return None
 
 
 class Handler(BaseHTTPRequestHandler):

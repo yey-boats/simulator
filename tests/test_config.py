@@ -39,3 +39,11 @@ def test_settings_has_boat_geometry_defaults():
     s = Settings()
     assert s.boat_draft_m == 2.2
     assert s.transducer_depth_m == 0.6
+
+
+def test_boat_geometry_single_source():
+    """The SignalK writer's depth constants come from config (no duplication)."""
+    from yey.boats.simulator import config
+    from yey.boats.simulator.engine import signalk_writer
+    assert signalk_writer.DRAFT_M == config.DEFAULT_BOAT_DRAFT_M
+    assert signalk_writer.TRANSDUCER_DEPTH_M == config.DEFAULT_TRANSDUCER_DEPTH_M
