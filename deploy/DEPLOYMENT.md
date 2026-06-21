@@ -52,6 +52,7 @@ Add these to the existing `boat-sim` environment to enable the demo:
 |---|---|---|
 | `GEOGRID_API_URL` | `http://bathy:8089/v1/gebco2020` | point depth/routing at the `bathy` service instead of the public OpenTopoData (avoids the 429 quota). Use the address by which the sim reaches `bathy` (service name on a Compose/ECS network, or `localhost` with host networking). |
 | `RANDOM_PASSAGES` | `1` | enable random-passage mode |
+| `START_LAT` / `START_LON` | `44.7` / `13.1` | **open-water cold-start seed** (decimal degrees). Overrides the SignalK-resume / route-origin start so the boat begins in open water. **Required for random-passage mode** if the persisted/default start is inshore (e.g. the Venice lagoon): a coarse-grid A\* can't route *out* of a lagoon, so the boat would sit there drawing destinations it can never reach. A live hot-restart position still wins (no mid-run teleport). Pick a point inside the `bathy` bbox with open sea room — e.g. `44.7,13.1` (N Adriatic, ~−39 m, W of Istria). |
 | `PASSAGE_MIN_NM` | `8` | min passage length (nM). **8–15 is the demo default** (a fresh routed passage roughly every 1.5–2.5 h at ~6 kn); use `40`/`60` for realistic-length passages (~7–10 h each). |
 | `PASSAGE_MAX_NM` | `15` | max passage length (nM) |
 | `PASSAGE_ARRIVAL_NM` | `1.0` | lay the next passage when within this distance of the destination |
@@ -104,6 +105,8 @@ services:
       SIM_WEB_PORT: "8088"
       GEOGRID_API_URL: http://bathy:8089/v1/gebco2020
       RANDOM_PASSAGES: "1"
+      START_LAT: "44.7"          # open-water seed (W of Istria); required so the
+      START_LON: "13.1"          # boat doesn't start stuck inshore (e.g. lagoon)
       PASSAGE_MIN_NM: "8"        # 8-15 nM: a new routed passage every ~1.5-2.5 h
       PASSAGE_MAX_NM: "15"       # use 40/60 for realistic ~7-10 h passages
       AUTOROUTE_MAX_CELLS: "60000"

@@ -34,6 +34,27 @@ META_LOADS = ["fridge", "watermaker", "nav", "instruments", "lighting", "wifi",
               "bilge_pump", "water_pump"]
 
 
+def _env_start_pos() -> tuple[float, float] | None:
+    """Optional fixed cold-start position from START_LAT / START_LON (decimal deg).
+
+    When both are set and parseable this overrides the SignalK-resume / route-origin
+    cold-start position. It exists to seed the boat in open water for the
+    random-passage demo: a persisted inshore position (e.g. a marina in a lagoon)
+    can't be autorouted out of at a coarse bathymetry grid, so the boat would sit
+    there drawing destinations it can never reach. A live caller-supplied start_pos
+    (hot restart with the last reported position) still wins, so the boat does not
+    teleport back to the seed mid-run.
+    """
+    lat_s, lon_s = os.environ.get("START_LAT"), os.environ.get("START_LON")
+    if not lat_s or not lon_s:
+        return None
+    try:
+        return (float(lat_s), float(lon_s))
+    except ValueError:
+        print(f"[sim] ignoring invalid START_LAT/START_LON: {lat_s!r}, {lon_s!r}", flush=True)
+        return None
+
+
 def build_data_source(settings: Settings):
     if settings.weather_source == "signalk":
         return SignalKDataSource(settings.signalk_host, settings.signalk_port)
@@ -130,6 +151,13 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
     await chain.open()
     sk_sink = chain.active if isinstance(chain.active, SignalKSink) else None
     writer = sk_sink.writer if sk_sink else None
+
+    if start_pos is None:
+        env_pos = _env_start_pos()
+        if env_pos is not None:
+            start_pos = env_pos
+            print(f"[sim] start position from START_LAT/START_LON: "
+                  f"({env_pos[0]:.4f}, {env_pos[1]:.4f})", flush=True)
 
     if start_pos is not None:
         start_lat, start_lon = start_pos
