@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import random
 import time
 from datetime import datetime, timezone
 
@@ -82,6 +83,16 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
         max_cells=int(os.environ.get("AUTOROUTE_MAX_CELLS", _def.max_cells)),
         max_nodes=int(os.environ.get("AUTOROUTE_MAX_NODES", _def.max_nodes)),
     )
+    # Random-passage demo mode: instead of routing the fixed planner route, the
+    # sim repeatedly picks a navigable destination PASSAGE_MIN..MAX nM away,
+    # autoroutes to it, and pushes each routed passage to SignalK; on arrival it
+    # lays the next one. Opt-in via RANDOM_PASSAGES (off by default).
+    passage_mode = os.environ.get("RANDOM_PASSAGES", "").lower() in ("1", "true", "yes", "on")
+    passage_min_nm = float(os.environ.get("PASSAGE_MIN_NM", "40"))
+    passage_max_nm = float(os.environ.get("PASSAGE_MAX_NM", "60"))
+    passage_arrival_nm = float(os.environ.get("PASSAGE_ARRIVAL_NM", "1.0"))
+    passage_poll_s = float(os.environ.get("PASSAGE_POLL_S", "5"))
+
     # Autoroute is NOT run inline: it can fetch a lot of GEBCO and would stall
     # startup. Reuse a persisted expanded route when the planner+cfg are
     # unchanged (instant); otherwise the engine starts on the planner legs and a
@@ -93,15 +104,20 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
                          route_cfg.penalty_tolerated, route_cfg.bbox_margin_deg,
                          route_cfg.max_cells, route_cfg.max_nodes]
     autoroute_cache = resources.autoroute_cache_path(settings.data_dir)
-    cached_wps = Route.load_expanded_waypoints(autoroute_cache, autoroute_fp, autoroute_cfg_sig)
-    autoroute_needed = cached_wps is None
-    if cached_wps is not None:
-        route.waypoints = Route.waypoints_from_full_dicts(cached_wps)
-        print(f"[sim] autoroute: loaded cached expanded route ({len(route.waypoints)} wp)",
-              flush=True)
+    autoroute_needed = False
+    if passage_mode:
+        print(f"[sim] random-passage mode: {passage_min_nm:.0f}-{passage_max_nm:.0f} nM "
+              f"autorouted passages", flush=True)
     else:
-        print("[sim] autoroute: computing in background (engine starts on planner legs)",
-              flush=True)
+        cached_wps = Route.load_expanded_waypoints(autoroute_cache, autoroute_fp, autoroute_cfg_sig)
+        autoroute_needed = cached_wps is None
+        if cached_wps is not None:
+            route.waypoints = Route.waypoints_from_full_dicts(cached_wps)
+            print(f"[sim] autoroute: loaded cached expanded route ({len(route.waypoints)} wp)",
+                  flush=True)
+        else:
+            print("[sim] autoroute: computing in background (engine starts on planner legs)",
+                  flush=True)
     polars = Polars.load(resources.polar_csv())
 
     chain = build_sink_chain(settings)
@@ -167,26 +183,27 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
     pending_route: dict = {}
 
     async def _apply_pending_route():
-        new_wps = pending_route.pop("wps", None)
-        if new_wps is None:
+        item = pending_route.pop("item", None)
+        if item is None:
             return
+        new_wps = item["wps"]
         # Synchronous, atomic relative to a tick (no await between these two):
         route.waypoints = new_wps
         route.resync_from_position(engine.nav_state.lat, engine.nav_state.lon)
-        try:
-            route.save_expanded_route(autoroute_cache, autoroute_fp, autoroute_cfg_sig)
-        except OSError as exc:
-            print(f"[sim] autoroute cache write failed (non-fatal): {exc!r}", flush=True)
+        if item.get("persist"):
+            try:
+                route.save_expanded_route(autoroute_cache, autoroute_fp, autoroute_cfg_sig)
+            except OSError as exc:
+                print(f"[sim] autoroute cache write failed (non-fatal): {exc!r}", flush=True)
         next_idx = (route.current_index + 1) % len(route.waypoints)  # snapshot before awaits
-        print(f"[sim] autoroute: applied navigable route ({len(new_wps)} wp, background)",
+        print(f"[sim] {item.get('label', 'route')}: applied route ({len(new_wps)} wp)",
               flush=True)
         if writer is not None:
             try:
                 await writer.put_route_resource(ROUTE_UUID, _route_to_geojson(route))
                 await writer.put_active_route(ROUTE_UUID, next_idx)
             except Exception as exc:  # noqa: BLE001
-                print(f"[sim] autoroute route re-upload failed (non-fatal): {exc!r}",
-                      flush=True)
+                print(f"[sim] route re-upload failed (non-fatal): {exc!r}", flush=True)
 
     async def drive():
         while True:
@@ -215,10 +232,38 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
             print(f"[sim] autoroute background failed (keeping planner legs): {exc!r}",
                   flush=True)
             return
-        pending_route["wps"] = new_wps   # drive() applies it between ticks
+        pending_route["item"] = {"wps": new_wps, "persist": True, "label": "autoroute"}
+
+    async def passage_loop():
+        """Random-passage demo: lay a fresh PASSAGE_MIN..MAX nM autorouted leg,
+        and on arrival lay the next. The passage is computed in a worker thread
+        against a PRIVATE grid (honours GEOGRID_API_URL), handed to drive() which
+        swaps it in between ticks and pushes it to SignalK."""
+        from yey.boats.simulator.engine.passage import distance_nm, make_passage
+        rgrid = GeoGrid(fetcher=_opentopo_fetch)   # private; uses GEOGRID_API_URL
+        rng = random.Random()
+        dest: tuple[float, float] | None = None
+        while True:
+            pos = (engine.nav_state.lat, engine.nav_state.lon)
+            near = dest is not None and distance_nm(pos[0], pos[1], dest[0], dest[1]) <= passage_arrival_nm
+            if (dest is None or near) and "item" not in pending_route:
+                wps = await asyncio.to_thread(
+                    make_passage, pos[0], pos[1], rgrid, route_cfg,
+                    passage_min_nm, passage_max_nm, rng)
+                if wps:
+                    dest = (wps[-1].lat, wps[-1].lon)
+                    leg_nm = distance_nm(pos[0], pos[1], dest[0], dest[1])
+                    pending_route["item"] = {"wps": wps, "persist": False, "label": "passage"}
+                    print(f"[sim] passage: new {leg_nm:.0f} nM leg to "
+                          f"({dest[0]:.3f}, {dest[1]:.3f}), {len(wps)} wp", flush=True)
+                else:
+                    print("[sim] passage: no clear destination found; retrying", flush=True)
+            await asyncio.sleep(passage_poll_s)
 
     tasks = [drive(), ais_source.start(), grid.fetch_loop()]
-    if autoroute_needed:
+    if passage_mode:
+        tasks.append(passage_loop())
+    elif autoroute_needed:
         tasks.append(autoroute_bg())
     if writer is not None:
         cmd_src = SignalKCommandSource(
