@@ -52,8 +52,8 @@ Add these to the existing `boat-sim` environment to enable the demo:
 |---|---|---|
 | `GEOGRID_API_URL` | `http://bathy:8089/v1/gebco2020` | point depth/routing at the `bathy` service instead of the public OpenTopoData (avoids the 429 quota). Use the address by which the sim reaches `bathy` (service name on a Compose/ECS network, or `localhost` with host networking). |
 | `RANDOM_PASSAGES` | `1` | enable random-passage mode |
-| `PASSAGE_MIN_NM` | `40` | min passage length (nM) |
-| `PASSAGE_MAX_NM` | `60` | max passage length (nM) |
+| `PASSAGE_MIN_NM` | `8` | min passage length (nM). **8–15 is the demo default** (a fresh routed passage roughly every 1.5–2.5 h at ~6 kn); use `40`/`60` for realistic-length passages (~7–10 h each). |
+| `PASSAGE_MAX_NM` | `15` | max passage length (nM) |
 | `PASSAGE_ARRIVAL_NM` | `1.0` | lay the next passage when within this distance of the destination |
 | `PASSAGE_POLL_S` | `5` | how often the passage manager checks for arrival |
 | `AUTOROUTE_MAX_CELLS` | `60000` | A\* search-area cap (raise from the public-API default of 8000 now that the local source has no quota) |
@@ -104,8 +104,8 @@ services:
       SIM_WEB_PORT: "8088"
       GEOGRID_API_URL: http://bathy:8089/v1/gebco2020
       RANDOM_PASSAGES: "1"
-      PASSAGE_MIN_NM: "40"
-      PASSAGE_MAX_NM: "60"
+      PASSAGE_MIN_NM: "8"        # 8-15 nM: a new routed passage every ~1.5-2.5 h
+      PASSAGE_MAX_NM: "15"       # use 40/60 for realistic ~7-10 h passages
       AUTOROUTE_MAX_CELLS: "60000"
       AUTOROUTE_MAX_NODES: "300000"
     ports: ["8088:8088"]
@@ -133,11 +133,11 @@ volumes:
 
 ## Notes / caveats
 
-- **Passage duration:** the sim runs in real time at sailing speed (~6 kn), so a
-  40–60 nM passage takes **~7–10 hours** of wall-clock. This is a continuous,
-  always-on demo, not a short showcase. For faster turnover, lower
-  `PASSAGE_MIN_NM`/`MAX_NM` (e.g. 8–15 nM) — short legs also keep A\* well within
-  the resolution where it routes cleanly.
+- **Passage duration:** the sim runs in real time at sailing speed (~6 kn). The
+  **8–15 nM demo default lays a fresh routed passage roughly every 1.5–2.5 h**;
+  the realistic `40`/`60` setting takes ~7–10 h per passage. Either way it is a
+  continuous, always-on demo. Short legs also keep A\* well within the
+  resolution where it routes cleanly.
 - **Resolution limit:** at the default ~2 km grid (`BATHY_STRIDE=5`) the A\*
   router avoids open obstacles and coasts well but cannot thread the narrowest
   archipelago channels; passages that can't be routed cleanly are rejected and a
