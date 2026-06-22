@@ -42,3 +42,4 @@ class TelemetrySnapshot:
     ais_contacts: list[AisContact] = field(default_factory=list)
     current_set_deg: float = 0.0    # modelled current direction (degrees true, toward)
     current_drift_kts: float = 0.0  # modelled current speed (knots)
+    engine_run_s: float = 0.0       # cumulative engine-on seconds (HourMeter; -> propulsion.main.runTime)

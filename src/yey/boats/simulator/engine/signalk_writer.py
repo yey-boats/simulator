@@ -122,6 +122,11 @@ _METADATA: dict[str, dict] = {
         "description": "VMG-optimal boat speed at target TWA for current TWS", "units": "m/s", "timeout": 3,
         "source": {"manufacturer": _RB, "model": "RB-POLAR-BEAR"},
     },
+    "performance.targetVmgToWaypoint": {
+        "description": "Sail-POTENTIAL VMG toward the active mark (polar-optimal; not actual VMG)",
+        "units": "m/s", "timeout": 3,
+        "source": {"manufacturer": _RB, "model": "RB-POLAR-BEAR"},
+    },
     # ── Depth ── RB-DEPTHY-DEEP: 200 kHz single-beam depth sounder ───────
     "environment.depth.belowSurface": {
         "description": "Water depth below the surface (charted depth)", "units": "m", "timeout": 3,
@@ -240,6 +245,10 @@ _METADATA: dict[str, dict] = {
         "description": "Engine alternator charging power", "units": "W", "timeout": 5,
         "source": {"manufacturer": _RB, "model": "RB-ALTERNATOR-PRO"},
     },
+    "electrical.alternators.1.current": {
+        "description": "Engine alternator output current", "units": "A", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-ALTERNATOR-PRO"},
+    },
     # ── Genset ── RB-NOISY-BOX-5KVA: diesel genset charger ───────────────
     "electrical.chargers.genset.power": {
         "description": "Genset charging power", "units": "W", "timeout": 5,
@@ -345,6 +354,11 @@ _METADATA: dict[str, dict] = {
     "propulsion.main.revolutions": {
         "description": "Engine shaft speed in Hz (RPM÷60). Cruise 2200 RPM ≈ 36.7 Hz, max 3000 RPM = 50 Hz",
         "units": "Hz", "timeout": 3,
+        "source": {"manufacturer": _RB, "model": "RB-VROOM-METER"},
+    },
+    "propulsion.main.runTime": {
+        "description": "Cumulative engine running time (engine-hours), monotonic across restarts",
+        "units": "s", "timeout": 5,
         "source": {"manufacturer": _RB, "model": "RB-VROOM-METER"},
     },
     "propulsion.genset.state": {
@@ -554,7 +568,8 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
                          polars: Any = None, autopilot: Any = None,
                          closest_approach: tuple[float, float] | None = None,
                          current: tuple[float, float] | None = None,
-                         prev_wp: tuple[str, float, float] | None = None) -> dict:
+                         prev_wp: tuple[str, float, float] | None = None,
+                         engine_run_s: float | None = None) -> dict:
     ts = _ts(utc_now)
     engine_on = state == SimState.MOTORED
     genset_on = elec.genset_state == "running"
@@ -622,6 +637,9 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
         _v("electrical.solar.1.voltage", elec.voltage),
         # Alternator / genset / inverter
         _v("electrical.alternators.1.power",   elec.alternator_w),
+        # Alternator output current (A) — 0 when the engine's off, ~100 A charging.
+        # Lets a charging-fault diagnostic tell "engine running but not charging".
+        _v("electrical.alternators.1.current", elec.alternator_w / max(elec.voltage, 1)),
         _v("electrical.chargers.genset.power", elec.genset_w),
         _v("electrical.inverter.1.state",      elec.inverter_state),
         _v("electrical.inverter.1.dc.power",   sum(elec.loads.values())),
@@ -677,6 +695,11 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
     for k, vv in load_entries:
         values.append(_v(f"electrical.loads.{k}.state", "on" if vv > 0 else "off"))
 
+    # Engine hours — cumulative engine-on seconds from the persisted HourMeter
+    # (only when the caller supplies it; older call sites omit it).
+    if engine_run_s is not None:
+        values.append(_v("propulsion.main.runTime", float(engine_run_s)))
+
     # Course — legacy v1 rhumbline legs (distance/bearing/CTS/XTE) computed from
     # the sim's own route state. The v2 Course API (put_active_route +
     # @signalk/course-provider) publishes navigation.course.calcValues.*, which
@@ -708,6 +731,22 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
         # VMG-optimal boat speed at the target TWA — the speed the helm should hit;
         # pairs with the already-emitted performance.targetAngle.
         values.append(_v("performance.targetSpeed",      target_speed_kts * 0.514444))
+        # Sail-POTENTIAL VMG toward the active mark (the speed we'd make good toward
+        # it sailing optimally) — distinct from the SignalK-standard *actual* VMG.
+        # Lay the mark directly when its bearing-vs-wind angle is inside [beat,gybe];
+        # otherwise sail the beat/gybe angle and project onto the mark. Lets the
+        # diagnostics "motoring when sailable" rule compare sail-potential vs engine SOG.
+        if next_wp is not None:
+            _, _nlat, _nlon = next_wp
+            _off = abs((great_circle_bearing(nav.lat, nav.lon, _nlat, _nlon)
+                        - nav.twd_deg + 180.0) % 360.0 - 180.0)  # 0=dead upwind,180=dead down
+            if _off < beat_deg:
+                _vmg_wp = polars.polar_speed(nav.tws_kts, beat_deg) * math.cos(math.radians(beat_deg - _off))
+            elif _off > gybe_deg:
+                _vmg_wp = polars.polar_speed(nav.tws_kts, gybe_deg) * math.cos(math.radians(_off - gybe_deg))
+            else:
+                _vmg_wp = polars.polar_speed(nav.tws_kts, _off)
+            values.append(_v("performance.targetVmgToWaypoint", max(0.0, _vmg_wp) * 0.514444))
         values.append(_v("performance.targetAngle",      math.radians(target_deg) * tack_sign))
         values.append(_v("performance.beatAngle",        math.radians(beat_deg) * tack_sign))
         values.append(_v("performance.gybeAngle",        math.radians(gybe_deg) * tack_sign))
@@ -836,10 +875,11 @@ class SignalKWriter:
                                  polars: Any = None, autopilot: Any = None,
                                  closest_approach: tuple[float, float] | None = None,
                                  current: tuple[float, float] | None = None,
-                                 prev_wp: tuple[str, float, float] | None = None) -> None:
+                                 prev_wp: tuple[str, float, float] | None = None,
+                                 engine_run_s: float | None = None) -> None:
         delta = _build_vessel_delta(nav, elec, sys_, lights, wx, state, utc_now, temps,
                                     next_wp, route_href, point_index, polars, autopilot,
-                                    closest_approach, current, prev_wp)
+                                    closest_approach, current, prev_wp, engine_run_s)
         try:
             self._queue.put_nowait(json.dumps(delta))
         except asyncio.QueueFull:
