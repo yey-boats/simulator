@@ -122,6 +122,11 @@ _METADATA: dict[str, dict] = {
         "description": "VMG-optimal boat speed at target TWA for current TWS", "units": "m/s", "timeout": 3,
         "source": {"manufacturer": _RB, "model": "RB-POLAR-BEAR"},
     },
+    "performance.targetVmgToWaypoint": {
+        "description": "Sail-POTENTIAL VMG toward the active mark (polar-optimal; not actual VMG)",
+        "units": "m/s", "timeout": 3,
+        "source": {"manufacturer": _RB, "model": "RB-POLAR-BEAR"},
+    },
     # ── Depth ── RB-DEPTHY-DEEP: 200 kHz single-beam depth sounder ───────
     "environment.depth.belowSurface": {
         "description": "Water depth below the surface (charted depth)", "units": "m", "timeout": 3,
@@ -726,6 +731,22 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
         # VMG-optimal boat speed at the target TWA — the speed the helm should hit;
         # pairs with the already-emitted performance.targetAngle.
         values.append(_v("performance.targetSpeed",      target_speed_kts * 0.514444))
+        # Sail-POTENTIAL VMG toward the active mark (the speed we'd make good toward
+        # it sailing optimally) — distinct from the SignalK-standard *actual* VMG.
+        # Lay the mark directly when its bearing-vs-wind angle is inside [beat,gybe];
+        # otherwise sail the beat/gybe angle and project onto the mark. Lets the
+        # diagnostics "motoring when sailable" rule compare sail-potential vs engine SOG.
+        if next_wp is not None:
+            _, _nlat, _nlon = next_wp
+            _off = abs((great_circle_bearing(nav.lat, nav.lon, _nlat, _nlon)
+                        - nav.twd_deg + 180.0) % 360.0 - 180.0)  # 0=dead upwind,180=dead down
+            if _off < beat_deg:
+                _vmg_wp = polars.polar_speed(nav.tws_kts, beat_deg) * math.cos(math.radians(beat_deg - _off))
+            elif _off > gybe_deg:
+                _vmg_wp = polars.polar_speed(nav.tws_kts, gybe_deg) * math.cos(math.radians(_off - gybe_deg))
+            else:
+                _vmg_wp = polars.polar_speed(nav.tws_kts, _off)
+            values.append(_v("performance.targetVmgToWaypoint", max(0.0, _vmg_wp) * 0.514444))
         values.append(_v("performance.targetAngle",      math.radians(target_deg) * tack_sign))
         values.append(_v("performance.beatAngle",        math.radians(beat_deg) * tack_sign))
         values.append(_v("performance.gybeAngle",        math.radians(gybe_deg) * tack_sign))
