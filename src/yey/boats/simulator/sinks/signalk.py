@@ -61,7 +61,18 @@ class SignalKSink:
             point_index=snapshot.point_index, polars=snapshot.polars,
             autopilot=snapshot.autopilot, closest_approach=closest_approach,
             current=current, prev_wp=snapshot.prev_wp,
-            engine_run_s=snapshot.engine_run_s)
+            engine_run_s=snapshot.engine_run_s,
+            oil_pressure_pa=snapshot.oil_pressure_pa,
+            exhaust_temp_k=snapshot.exhaust_temp_k,
+            starter_voltage=snapshot.starter_voltage,
+            starter_soc=snapshot.starter_soc,
+            starter_current_a=snapshot.starter_current_a,
+            gnss_satellites=snapshot.gnss_satellites,
+            gnss_hdop=snapshot.gnss_hdop,
+            gnss_quality=snapshot.gnss_quality,
+            gnss_antenna_altitude_m=snapshot.gnss_antenna_altitude_m,
+            gnss_position_jitter_deg=snapshot.gnss_position_jitter_deg,
+            rate_of_turn_rad_s=snapshot.rate_of_turn_rad_s)
         for c in snapshot.ais_contacts:
             await self.writer.enqueue_ais(c.mmsi, c.lat, c.lon, c.cog_deg,
                                           c.sog_kts, c.name, c.ship_type)
