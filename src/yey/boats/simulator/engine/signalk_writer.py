@@ -85,6 +85,14 @@ _METADATA: dict[str, dict] = {
         "description": "True wind speed over water", "units": "m/s", "timeout": 3,
         "source": {"manufacturer": _RB, "model": "RB-WINDY-MC-WINDFACE"},
     },
+    "environment.wind.directionTrue": {
+        "description": "True wind direction, rel. true north", "units": "rad", "timeout": 3,
+        "source": {"manufacturer": _RB, "model": "RB-WINDY-MC-WINDFACE"},
+    },
+    "environment.wind.gust": {
+        "description": "True wind gust speed (forecast peak)", "units": "m/s", "timeout": 3,
+        "source": {"manufacturer": _RB, "model": "RB-WINDY-MC-WINDFACE"},
+    },
     # ── Performance ── RB-POLAR-BEAR: polar-table performance computer ───
     "performance.velocityMadeGood": {
         "description": "VMG toward/away from true wind (polar-derived)", "units": "m/s", "timeout": 3,
@@ -110,7 +118,15 @@ _METADATA: dict[str, dict] = {
         "description": "Optimal downwind TWA for current TWS", "units": "rad", "timeout": 3,
         "source": {"manufacturer": _RB, "model": "RB-POLAR-BEAR"},
     },
+    "performance.targetSpeed": {
+        "description": "VMG-optimal boat speed at target TWA for current TWS", "units": "m/s", "timeout": 3,
+        "source": {"manufacturer": _RB, "model": "RB-POLAR-BEAR"},
+    },
     # ── Depth ── RB-DEPTHY-DEEP: 200 kHz single-beam depth sounder ───────
+    "environment.depth.belowSurface": {
+        "description": "Water depth below the surface (charted depth)", "units": "m", "timeout": 3,
+        "source": {"manufacturer": _RB, "model": "RB-DEPTHY-DEEP"},
+    },
     "environment.depth.belowKeel": {
         "description": "Water depth below keel", "units": "m", "timeout": 3,
         "source": {"manufacturer": _RB, "model": "RB-DEPTHY-DEEP"},
@@ -200,6 +216,10 @@ _METADATA: dict[str, dict] = {
     },
     "electrical.batteries.house.capacity.remaining": {
         "description": "Estimated remaining energy", "units": "J", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-JUICE-GAUGE-LFP"},
+    },
+    "electrical.batteries.house.power": {
+        "description": "House bank net power, +charging −load", "units": "W", "timeout": 5,
         "source": {"manufacturer": _RB, "model": "RB-JUICE-GAUGE-LFP"},
     },
     # ── Solar ── RB-SUNSHINE-HARVESTER: 40 A MPPT controller ─────────────
@@ -372,6 +392,11 @@ _METADATA: dict[str, dict] = {
     },
     "propulsion.fuel.1.consumption": {
         "description": "Genset fuel flow (m³/s). Running: ~5.56e-7 m³/s (2 L/h)",
+        "units": "m3/s", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-FUEL-FLOW-PRO"},
+    },
+    "propulsion.main.fuel.rate": {
+        "description": "Main engine fuel rate (standard path; = fuel.0.consumption)",
         "units": "m3/s", "timeout": 5,
         "source": {"manufacturer": _RB, "model": "RB-FUEL-FLOW-PRO"},
     },
@@ -555,7 +580,14 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
         _v("environment.wind.speedApparent",  nav.aws_kts * 0.514444),
         _v("environment.wind.angleTrueWater", math.radians(nav.twa_deg)),
         _v("environment.wind.speedTrue",      nav.tws_kts * 0.514444),
+        # True wind DIRECTION (rel. true north) — the engine already tracks it as
+        # nav.twd_deg; publish it so wind-shift history/queries have data (the
+        # bundle previously had to derive it). Normalise to 0..2π.
+        _v("environment.wind.directionTrue",  math.radians(nav.twd_deg % 360.0)),
+        # Forecast gust ceiling (already m/s) — lets "gust event" vs steady TWS show.
+        _v("environment.wind.gust",           wx.gust_ms),
         # Depth — nav.depth_m is depth below surface (D), from the GeoGrid.
+        _v("environment.depth.belowSurface",    nav.depth_m),
         _v("environment.depth.belowKeel",       max(0.0, nav.depth_m - DRAFT_M)),
         _v("environment.depth.belowTransducer", max(0.0, nav.depth_m - TRANSDUCER_DEPTH_M)),
         # Sea water temp: stable, a touch cooler than 2 m air, plausible range.
@@ -582,6 +614,8 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
         _v("electrical.batteries.house.temperature",        wx.temp_c + 2 + 273.15),
         _v("electrical.batteries.house.capacity.nominal",   BATTERY_WH_J),
         _v("electrical.batteries.house.capacity.remaining", elec.soc * BATTERY_WH_J),
+        # Net house-bank power, +charging / −load (already computed by Electrical).
+        _v("electrical.batteries.house.power",              elec.net_w),
         # Solar
         _v("electrical.solar.1.power",   elec.solar_w),
         _v("electrical.solar.1.current", elec.solar_w / max(elec.voltage, 1)),
@@ -632,6 +666,9 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
         # Fuel consumption (L/h → L/s → m³/s: ÷3600÷1000)
         _v("propulsion.fuel.0.consumption", fuel_L_h / 3600 / 1000 if engine_on else 0.0),
         _v("propulsion.fuel.1.consumption", (2.0 / 3600 / 1000) if genset_on else 0.0),
+        # Standard main-engine fuel-rate path (same value as fuel.0.consumption);
+        # the rate consumers query directly. Core signal for motoring-vs-sailing analysis.
+        _v("propulsion.main.fuel.rate", fuel_L_h / 3600 / 1000 if engine_on else 0.0),
     ]
 
     # Loads — built outside the list literal to avoid walrus-operator issues
@@ -665,8 +702,12 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
         # Sign target/beat/gybe to the current tack (TWA sign) so it points to
         # the same side the boat is on (SignalK convention: +stbd, −port).
         tack_sign = -1.0 if nav.twa_deg < 0 else 1.0
+        target_speed_kts = polars.polar_speed(nav.tws_kts, target_deg)
         values.append(_v("performance.velocityMadeGood", vmg_kts * 0.514444))
         values.append(_v("performance.polarSpeed",       polar_speed_kts * 0.514444))
+        # VMG-optimal boat speed at the target TWA — the speed the helm should hit;
+        # pairs with the already-emitted performance.targetAngle.
+        values.append(_v("performance.targetSpeed",      target_speed_kts * 0.514444))
         values.append(_v("performance.targetAngle",      math.radians(target_deg) * tack_sign))
         values.append(_v("performance.beatAngle",        math.radians(beat_deg) * tack_sign))
         values.append(_v("performance.gybeAngle",        math.radians(gybe_deg) * tack_sign))
