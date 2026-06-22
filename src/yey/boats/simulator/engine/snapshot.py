@@ -43,3 +43,15 @@ class TelemetrySnapshot:
     current_set_deg: float = 0.0    # modelled current direction (degrees true, toward)
     current_drift_kts: float = 0.0  # modelled current speed (knots)
     engine_run_s: float = 0.0       # cumulative engine-on seconds (HourMeter; -> propulsion.main.runTime)
+    # ── Phase-3 diagnostic signals (None => path omitted, like engine_run_s) ──
+    oil_pressure_pa: float | None = None          # propulsion.main.oilPressure (Pa)
+    exhaust_temp_k: float | None = None           # propulsion.main.exhaustTemperature (K)
+    starter_voltage: float | None = None          # electrical.batteries.starter.voltage (V)
+    starter_soc: float | None = None              # electrical.batteries.starter.stateOfCharge (ratio)
+    starter_current_a: float | None = None        # electrical.batteries.starter.current (A)
+    gnss_satellites: int | None = None            # navigation.gnss.satellites (count)
+    gnss_hdop: float | None = None                # navigation.gnss.horizontalDilution
+    gnss_quality: str | None = None               # navigation.gnss.methodQuality
+    gnss_antenna_altitude_m: float | None = None  # navigation.gnss.antennaAltitude (m)
+    gnss_position_jitter_deg: tuple[float, float] | None = None  # (lat,lon) jitter applied to published position
+    rate_of_turn_rad_s: float | None = None       # navigation.rateOfTurn (rad/s)

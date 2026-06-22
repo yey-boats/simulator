@@ -62,3 +62,35 @@ async def test_command_sink_shim_enqueues():
     shim = EngineCommandSink(eng)
     shim.apply("set_heading", 123.0, current_heading_deg=90.0, twd_deg=200.0)
     assert eng._cmd_queue == [("set_heading", 123.0)]  # noqa: S101
+
+
+@pytest.mark.asyncio
+async def test_tick_emits_diagnostic_signal_fields():
+    eng = _engine()
+    now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=timezone.utc)
+    snap = await eng.tick(now)
+    # All Phase-3 diagnostic fields are populated every tick.
+    assert snap.oil_pressure_pa is not None  # noqa: S101
+    assert snap.exhaust_temp_k is not None  # noqa: S101
+    assert snap.starter_voltage is not None  # noqa: S101
+    assert snap.gnss_satellites is not None  # noqa: S101
+    assert snap.gnss_quality == "GNSS Fix"  # healthy by default  # noqa: S101
+    assert snap.rate_of_turn_rad_s is not None  # noqa: S101
+
+
+@pytest.mark.asyncio
+async def test_set_and_clear_fault_command_toggles_faultstate():
+    eng = _engine()
+    # set_fault / clear_fault mutate the shared FaultState directly (not the AP).
+    eng.submit_command("set_fault", "gps_degraded")
+    assert eng.faults.is_active("gps_degraded")  # noqa: S101
+    assert eng._cmd_queue == []  # not forwarded to autopilot  # noqa: S101
+    now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=timezone.utc)
+    snap = await eng.tick(now)
+    assert snap.gnss_quality == "no GNSS"  # noqa: S101
+    assert snap.gnss_position_jitter_deg is not None  # noqa: S101
+
+    eng.submit_command("clear_fault", "gps_degraded")
+    assert not eng.faults.is_active("gps_degraded")  # noqa: S101
+    snap2 = await eng.tick(now)
+    assert snap2.gnss_quality == "GNSS Fix"  # noqa: S101

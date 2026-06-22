@@ -151,7 +151,7 @@ class FakeWriter:
                                 utc_now, temps, next_wp=None, route_href="",
                                 point_index=0, polars=None, autopilot=None,
                                 closest_approach=None, current=None, prev_wp=None,
-                                engine_run_s=None):
+                                engine_run_s=None, **kwargs):
         self.current_calls.append(current)
 
     async def enqueue_ais(self, *a, **kw): ...

@@ -435,6 +435,50 @@ _METADATA: dict[str, dict] = {
         "description": "Cross-track error, + to starboard of the leg", "units": "m", "timeout": 5,
         "source": {"manufacturer": _RB, "model": "RB-PLOTTER-9000"},
     },
+    # ── Engine diagnostics ── RB-VROOM-METER: Volvo D4-55 CAN-bus gauge ──────
+    "propulsion.main.oilPressure": {
+        "description": "Engine oil pressure (f(rpm); ~250 kPa idle, ~450 kPa cruise)",
+        "units": "Pa", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-VROOM-METER"},
+    },
+    "propulsion.main.exhaustTemperature": {
+        "description": "Wet-exhaust gas temperature (raw-water cooled)", "units": "K", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-THERMO-INATOR"},
+    },
+    # ── Starter bank ── RB-JUICE-GAUGE-LFP: cranking-bank monitor ────────────
+    "electrical.batteries.starter.voltage": {
+        "description": "Starter (cranking) bank voltage; dips on crank", "units": "V", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-JUICE-GAUGE-LFP"},
+    },
+    "electrical.batteries.starter.stateOfCharge": {
+        "description": "Starter bank SOC 0–1", "units": "ratio", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-JUICE-GAUGE-LFP"},
+    },
+    "electrical.batteries.starter.current": {
+        "description": "Starter bank current, +charging −crank", "units": "A", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-JUICE-GAUGE-LFP"},
+    },
+    # ── GNSS ── RB-SKYHOOK-3000: GPS chartplotter ────────────────────────────
+    "navigation.gnss.satellites": {
+        "description": "Satellites used in the fix", "units": "count", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-SKYHOOK-3000"},
+    },
+    "navigation.gnss.horizontalDilution": {
+        "description": "Horizontal dilution of precision (HDOP)", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-SKYHOOK-3000"},
+    },
+    "navigation.gnss.methodQuality": {
+        "description": "Fix quality: 'GNSS Fix' / 'no GNSS'", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-SKYHOOK-3000"},
+    },
+    "navigation.gnss.antennaAltitude": {
+        "description": "GNSS antenna altitude above the waterline", "units": "m", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-SKYHOOK-3000"},
+    },
+    "navigation.rateOfTurn": {
+        "description": "Rate of turn, + to starboard (from heading delta)", "units": "rad/s", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-POINTY-END-200"},
+    },
     # ── Autopilot ── RB-OTTO-PILOT: simulated autopilot ──────────────────────
     "steering.autopilot.state": {
         "description": "Autopilot mode: standby/auto/wind/route", "timeout": 5,
@@ -569,7 +613,18 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
                          closest_approach: tuple[float, float] | None = None,
                          current: tuple[float, float] | None = None,
                          prev_wp: tuple[str, float, float] | None = None,
-                         engine_run_s: float | None = None) -> dict:
+                         engine_run_s: float | None = None,
+                         oil_pressure_pa: float | None = None,
+                         exhaust_temp_k: float | None = None,
+                         starter_voltage: float | None = None,
+                         starter_soc: float | None = None,
+                         starter_current_a: float | None = None,
+                         gnss_satellites: int | None = None,
+                         gnss_hdop: float | None = None,
+                         gnss_quality: str | None = None,
+                         gnss_antenna_altitude_m: float | None = None,
+                         gnss_position_jitter_deg: tuple[float, float] | None = None,
+                         rate_of_turn_rad_s: float | None = None) -> dict:
     ts = _ts(utc_now)
     engine_on = state == SimState.MOTORED
     genset_on = elec.genset_state == "running"
@@ -699,6 +754,37 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
     # (only when the caller supplies it; older call sites omit it).
     if engine_run_s is not None:
         values.append(_v("propulsion.main.runTime", float(engine_run_s)))
+
+    # ── Phase-3 diagnostic signals ── each emitted only when the caller supplies
+    # it (None => omitted), exactly like runTime, so existing call sites/tests
+    # are unaffected. Values are already SI from the engine models.
+    if oil_pressure_pa is not None:
+        values.append(_v("propulsion.main.oilPressure", float(oil_pressure_pa)))
+    if exhaust_temp_k is not None:
+        values.append(_v("propulsion.main.exhaustTemperature", float(exhaust_temp_k)))
+    if starter_voltage is not None:
+        values.append(_v("electrical.batteries.starter.voltage", float(starter_voltage)))
+    if starter_soc is not None:
+        values.append(_v("electrical.batteries.starter.stateOfCharge", float(starter_soc)))
+    if starter_current_a is not None:
+        values.append(_v("electrical.batteries.starter.current", float(starter_current_a)))
+    if gnss_satellites is not None:
+        values.append(_v("navigation.gnss.satellites", int(gnss_satellites)))
+    if gnss_hdop is not None:
+        values.append(_v("navigation.gnss.horizontalDilution", float(gnss_hdop)))
+    if gnss_quality is not None:
+        values.append(_v("navigation.gnss.methodQuality", gnss_quality))
+    if gnss_antenna_altitude_m is not None:
+        values.append(_v("navigation.gnss.antennaAltitude", float(gnss_antenna_altitude_m)))
+    if rate_of_turn_rad_s is not None:
+        values.append(_v("navigation.rateOfTurn", float(rate_of_turn_rad_s)))
+    # gps_degraded adds position jitter: re-emit navigation.position with the
+    # (lat,lon) offset applied so the reported fix wanders without corrupting
+    # the boat's dead-reckoned physics state.
+    if gnss_position_jitter_deg is not None:
+        lat_j, lon_j = gnss_position_jitter_deg
+        values.append(_v("navigation.position",
+                         {"latitude": nav.lat + lat_j, "longitude": nav.lon + lon_j}))
 
     # Course — legacy v1 rhumbline legs (distance/bearing/CTS/XTE) computed from
     # the sim's own route state. The v2 Course API (put_active_route +
@@ -876,10 +962,32 @@ class SignalKWriter:
                                  closest_approach: tuple[float, float] | None = None,
                                  current: tuple[float, float] | None = None,
                                  prev_wp: tuple[str, float, float] | None = None,
-                                 engine_run_s: float | None = None) -> None:
+                                 engine_run_s: float | None = None,
+                                 oil_pressure_pa: float | None = None,
+                                 exhaust_temp_k: float | None = None,
+                                 starter_voltage: float | None = None,
+                                 starter_soc: float | None = None,
+                                 starter_current_a: float | None = None,
+                                 gnss_satellites: int | None = None,
+                                 gnss_hdop: float | None = None,
+                                 gnss_quality: str | None = None,
+                                 gnss_antenna_altitude_m: float | None = None,
+                                 gnss_position_jitter_deg: tuple[float, float] | None = None,
+                                 rate_of_turn_rad_s: float | None = None) -> None:
         delta = _build_vessel_delta(nav, elec, sys_, lights, wx, state, utc_now, temps,
                                     next_wp, route_href, point_index, polars, autopilot,
-                                    closest_approach, current, prev_wp, engine_run_s)
+                                    closest_approach, current, prev_wp, engine_run_s,
+                                    oil_pressure_pa=oil_pressure_pa,
+                                    exhaust_temp_k=exhaust_temp_k,
+                                    starter_voltage=starter_voltage,
+                                    starter_soc=starter_soc,
+                                    starter_current_a=starter_current_a,
+                                    gnss_satellites=gnss_satellites,
+                                    gnss_hdop=gnss_hdop,
+                                    gnss_quality=gnss_quality,
+                                    gnss_antenna_altitude_m=gnss_antenna_altitude_m,
+                                    gnss_position_jitter_deg=gnss_position_jitter_deg,
+                                    rate_of_turn_rad_s=rate_of_turn_rad_s)
         try:
             self._queue.put_nowait(json.dumps(delta))
         except asyncio.QueueFull:

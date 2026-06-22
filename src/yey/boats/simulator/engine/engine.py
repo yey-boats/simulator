@@ -14,10 +14,13 @@ from pathlib import Path
 from typing import Any
 
 from yey.boats.simulator.engine.autopilot import Autopilot  # type: ignore[import]
+from yey.boats.simulator.engine.diagnostics import (  # type: ignore[import]
+    Gnss, StarterBattery, oil_pressure_pa, rate_of_turn_rad_s)
+from yey.boats.simulator.engine.faults import FaultState  # type: ignore[import]
 from yey.boats.simulator.engine.hourmeter import HourMeter  # type: ignore[import]
 from yey.boats.simulator.engine.electrical import Electrical, solar_elevation_deg  # type: ignore[import]
 from yey.boats.simulator.engine.lights import LightsModel  # type: ignore[import]
-from yey.boats.simulator.engine.navigator import Navigator, engine_fuel_L_h  # type: ignore[import]
+from yey.boats.simulator.engine.navigator import Navigator, engine_fuel_L_h, engine_rpm  # type: ignore[import]
 from yey.boats.simulator.engine.performance import polar_efficiency  # type: ignore[import]
 from yey.boats.simulator.engine.schedule import Schedule, SimState  # type: ignore[import]
 from yey.boats.simulator.engine.snapshot import TelemetrySnapshot  # type: ignore[import]
@@ -59,12 +62,27 @@ class Engine:
         self.lights = LightsModel()
         self.thermal = ThermalModel()
         self.autopilot = Autopilot()
+        # Diagnostic-signal models + shared fault injection (clear unless seeded
+        # by SIM_FAULTS at boot or toggled live via set_fault/clear_fault).
+        self.faults = FaultState()
+        self.starter = StarterBattery()
+        self.gnss = Gnss()
         self.nav_state = start_state
         self._cmd_queue: list[tuple[str, Any]] = []
         self._last_wx = DEFAULT_WEATHER
         self._last_twd = 0.0
 
     def submit_command(self, action: str, arg: Any) -> None:
+        """Queue a command. Fault-injection commands (set_fault/clear_fault)
+        mutate the shared FaultState immediately; everything else is forwarded
+        to the autopilot on the next tick (unchanged path)."""
+        a = (action or "").strip().lower()
+        if a == "set_fault" and isinstance(arg, str) and arg.strip():
+            self.faults.set(arg.strip())
+            return
+        if a == "clear_fault" and isinstance(arg, str) and arg.strip():
+            self.faults.clear(arg.strip())
+            return
         self._cmd_queue.append((action, arg))
 
     async def tick(self, now: Any) -> TelemetrySnapshot:
@@ -135,16 +153,41 @@ class Engine:
         if genset_running:
             fuel_l += 2.0 / 3600
 
+        engine_on = self.sched.state == SimState.MOTORED
         elec_state = self.elec.tick(1.0, self.sched.state, self.nav_state.lat,
                                     self.nav_state.lon, wx.cloud_cover, now)
+        # alternator_belt: a snapped/slipping belt means the alternator stops
+        # charging even though the engine runs (E2 root-cause), and — sharing the
+        # same belt with the raw-water pump — also starves engine cooling.
+        belt_sev = self.faults.severity("alternator_belt") if engine_on else 0.0
+        if belt_sev > 0.0:
+            elec_state.alternator_w *= (1.0 - belt_sev)
+            elec_state.net_w = (elec_state.solar_w + elec_state.alternator_w
+                                + elec_state.genset_w - sum(elec_state.loads.values()))
         sys_state = self.sys_.tick(1.0, self.sched.state, self.nav_state.tws_kts, now,
                                    fuel_l, False, False, False)
         is_night = solar_elevation_deg(self.nav_state.lat, self.nav_state.lon, now) < 0
         lights_state = self.lights.tick(1.0, self.sched.state, is_night, now)
         self.thermal.update_ambient(wx.temp_c)
         boiler_active = elec_state.loads.get("boiler", 0) > 0
-        self.thermal.tick(1.0, self.sched.state, genset_running, boiler_active)
+        # Engine load fraction (idle 750 → max 3000 RPM) for the load-driven
+        # oil-pressure and wet-exhaust curves.
+        rpm = engine_rpm(self.nav_state.stw_kts) if engine_on else 0.0
+        rpm_frac = max(0.0, min(1.0, (rpm - 750.0) / (3000.0 - 750.0))) if engine_on else 0.0
+        # raw_water_blocked (impeller/strainer) OR a snapped belt (shared raw-water
+        # pump) both starve cooling: exhaust + coolant climb at steady RPM.
+        cooling_sev = max(self.faults.severity("raw_water_blocked"), belt_sev) if engine_on else 0.0
+        self.thermal.tick(1.0, self.sched.state, genset_running, boiler_active,
+                          rpm_frac=rpm_frac, cooling_fault=cooling_sev)
         temps = self.thermal.cabin_temps(wx.temp_c, now)
+
+        # Diagnostic signal models (SI outputs threaded onto the snapshot).
+        oil_pressure_pa_ = oil_pressure_pa(
+            rpm_frac, engine_on, self.faults.severity("low_oil_pressure"))
+        starter_v, starter_soc, starter_a = self.starter.tick(
+            1.0, engine_on, self.faults.severity("weak_starter"))
+        gnss_state = self.gnss.tick(self.faults.severity("gps_degraded"))
+        rot_rad_s = rate_of_turn_rad_s(prev_hdg, self.nav_state.hdg_deg, 1.0)
 
         contacts = self._ais.get_contacts(self.nav_state.lat, self.nav_state.lon)
         current_set_deg, current_drift_kts = tidal_current(now)
@@ -163,6 +206,17 @@ class Engine:
             distance_to_next_nm=self.route.distance_to_next(self.nav_state.lat, self.nav_state.lon),
             ais_contacts=contacts,
             current_set_deg=current_set_deg,
-            current_drift_kts=current_drift_kts)
+            current_drift_kts=current_drift_kts,
+            oil_pressure_pa=oil_pressure_pa_,
+            exhaust_temp_k=temps["exhaust_k"],
+            starter_voltage=starter_v,
+            starter_soc=starter_soc,
+            starter_current_a=starter_a,
+            gnss_satellites=gnss_state["satellites"],
+            gnss_hdop=gnss_state["horizontalDilution"],
+            gnss_quality=gnss_state["methodQuality"],
+            gnss_antenna_altitude_m=gnss_state["antennaAltitude"],
+            gnss_position_jitter_deg=gnss_state["position_jitter_deg"],
+            rate_of_turn_rad_s=rot_rad_s)
         self.sched.tick(1.0)
         return snap
