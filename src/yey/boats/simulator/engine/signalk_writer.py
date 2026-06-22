@@ -351,6 +351,11 @@ _METADATA: dict[str, dict] = {
         "units": "Hz", "timeout": 3,
         "source": {"manufacturer": _RB, "model": "RB-VROOM-METER"},
     },
+    "propulsion.main.runTime": {
+        "description": "Cumulative engine running time (engine-hours), monotonic across restarts",
+        "units": "s", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-VROOM-METER"},
+    },
     "propulsion.genset.state": {
         "description": "Genset state: starting / running / stopped", "timeout": 5,
         "source": {"manufacturer": _RB, "model": "RB-NOISY-BOX-5KVA"},
@@ -558,7 +563,8 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
                          polars: Any = None, autopilot: Any = None,
                          closest_approach: tuple[float, float] | None = None,
                          current: tuple[float, float] | None = None,
-                         prev_wp: tuple[str, float, float] | None = None) -> dict:
+                         prev_wp: tuple[str, float, float] | None = None,
+                         engine_run_s: float | None = None) -> dict:
     ts = _ts(utc_now)
     engine_on = state == SimState.MOTORED
     genset_on = elec.genset_state == "running"
@@ -683,6 +689,11 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
         values.append(_v(f"electrical.loads.{k}.power", vv))
     for k, vv in load_entries:
         values.append(_v(f"electrical.loads.{k}.state", "on" if vv > 0 else "off"))
+
+    # Engine hours — cumulative engine-on seconds from the persisted HourMeter
+    # (only when the caller supplies it; older call sites omit it).
+    if engine_run_s is not None:
+        values.append(_v("propulsion.main.runTime", float(engine_run_s)))
 
     # Course — legacy v1 rhumbline legs (distance/bearing/CTS/XTE) computed from
     # the sim's own route state. The v2 Course API (put_active_route +
@@ -843,10 +854,11 @@ class SignalKWriter:
                                  polars: Any = None, autopilot: Any = None,
                                  closest_approach: tuple[float, float] | None = None,
                                  current: tuple[float, float] | None = None,
-                                 prev_wp: tuple[str, float, float] | None = None) -> None:
+                                 prev_wp: tuple[str, float, float] | None = None,
+                                 engine_run_s: float | None = None) -> None:
         delta = _build_vessel_delta(nav, elec, sys_, lights, wx, state, utc_now, temps,
                                     next_wp, route_href, point_index, polars, autopilot,
-                                    closest_approach, current, prev_wp)
+                                    closest_approach, current, prev_wp, engine_run_s)
         try:
             self._queue.put_nowait(json.dumps(delta))
         except asyncio.QueueFull:

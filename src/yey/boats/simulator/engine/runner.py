@@ -205,7 +205,7 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
         ais_source = SyntheticAISSource(get_pos=get_pos)
 
     engine = Engine(route, polars, data_source, ais_source,
-                    start_state=start_state, grid=grid)
+                    start_state=start_state, grid=grid, data_dir=settings.data_dir)
     engine_ref["engine"] = engine
 
     # One-slot handoff: autoroute_bg() computes the expanded waypoints in a

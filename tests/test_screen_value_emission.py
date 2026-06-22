@@ -208,7 +208,8 @@ class _FakeWriter:
     async def send_vessel_delta(self, nav, elec, sys_, lights, wx, state,
                                 utc_now, temps, next_wp=None, route_href="",
                                 point_index=0, polars=None, autopilot=None,
-                                closest_approach=None, current=None, prev_wp=None):
+                                closest_approach=None, current=None, prev_wp=None,
+                                engine_run_s=None):
         self.calls.append({"next_wp": next_wp, "prev_wp": prev_wp})
 
     async def enqueue_ais(self, *a, **kw): ...

@@ -10,9 +10,11 @@ no sink calls — those belong to the driver.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from yey.boats.simulator.engine.autopilot import Autopilot  # type: ignore[import]
+from yey.boats.simulator.engine.hourmeter import HourMeter  # type: ignore[import]
 from yey.boats.simulator.engine.electrical import Electrical, solar_elevation_deg  # type: ignore[import]
 from yey.boats.simulator.engine.lights import LightsModel  # type: ignore[import]
 from yey.boats.simulator.engine.navigator import Navigator, engine_fuel_L_h  # type: ignore[import]
@@ -41,11 +43,15 @@ class EngineCommandSink:
 
 class Engine:
     def __init__(self, route: Any, polars: Any, data_source: Any, ais_source: Any,
-                 start_state: Any, grid: Any) -> None:
+                 start_state: Any, grid: Any, data_dir: Any = None) -> None:
         self.route = route
         self.polars = polars
         self._data = data_source
         self._ais = ais_source
+        # Persisted engine-hours meter (monotonic across restarts). None path =>
+        # in-memory only (tests / no data_dir).
+        self._hourmeter = HourMeter(
+            (Path(data_dir) / "engine_runtime.json") if data_dir is not None else None)
         self.sched = Schedule()
         self.nav = Navigator(polars, self.sched, grid)
         self.elec = Electrical(initial_soc=0.85)
@@ -144,9 +150,11 @@ class Engine:
         current_set_deg, current_drift_kts = tidal_current(now)
         nwp = self.route.next_wp
         cwp = self.route.current  # active leg origin (previous waypoint)
+        engine_run_s = self._hourmeter.tick(self.sched.state == SimState.MOTORED, 1.0)
         snap = TelemetrySnapshot(
             nav=self.nav_state, elec=elec_state, sys=sys_state, lights=lights_state,
             wx=wx, state=self.sched.state, utc_now=now, temps=temps,
+            engine_run_s=engine_run_s,
             next_wp=(nwp.name, nwp.lat, nwp.lon),
             prev_wp=(cwp.name, cwp.lat, cwp.lon),
             route_href=f"/resources/routes/{ROUTE_UUID}",
