@@ -240,6 +240,10 @@ _METADATA: dict[str, dict] = {
         "description": "Engine alternator charging power", "units": "W", "timeout": 5,
         "source": {"manufacturer": _RB, "model": "RB-ALTERNATOR-PRO"},
     },
+    "electrical.alternators.1.current": {
+        "description": "Engine alternator output current", "units": "A", "timeout": 5,
+        "source": {"manufacturer": _RB, "model": "RB-ALTERNATOR-PRO"},
+    },
     # ── Genset ── RB-NOISY-BOX-5KVA: diesel genset charger ───────────────
     "electrical.chargers.genset.power": {
         "description": "Genset charging power", "units": "W", "timeout": 5,
@@ -622,6 +626,9 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
         _v("electrical.solar.1.voltage", elec.voltage),
         # Alternator / genset / inverter
         _v("electrical.alternators.1.power",   elec.alternator_w),
+        # Alternator output current (A) — 0 when the engine's off, ~100 A charging.
+        # Lets a charging-fault diagnostic tell "engine running but not charging".
+        _v("electrical.alternators.1.current", elec.alternator_w / max(elec.voltage, 1)),
         _v("electrical.chargers.genset.power", elec.genset_w),
         _v("electrical.inverter.1.state",      elec.inverter_state),
         _v("electrical.inverter.1.dc.power",   sum(elec.loads.values())),
