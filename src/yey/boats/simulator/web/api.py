@@ -31,7 +31,8 @@ def _config_public(settings) -> dict:
 
 
 def _validate_config(payload: dict) -> tuple[dict, dict]:
-    changes, errors = {}, {}
+    changes: dict[str, object] = {}
+    errors: dict[str, str] = {}
     if "signalk_host" in payload:
         if not str(payload["signalk_host"]).strip():
             errors["signalk_host"] = "must not be empty"

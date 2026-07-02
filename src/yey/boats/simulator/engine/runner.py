@@ -14,6 +14,7 @@ import os
 import random
 import time
 from datetime import datetime, UTC
+from typing import Any
 
 from yey.boats.simulator import resources  # type: ignore[import]
 from yey.boats.simulator.config import Settings  # type: ignore[import]
@@ -200,6 +201,10 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
             return (start_lat, start_lon)
         return (eng.nav_state.lat, eng.nav_state.lon)
 
+    # AISStreamSource/SyntheticAISSource share a duck-typed interface (start(),
+    # get_contacts()) with no common base class; Any avoids a false mypy
+    # incompatible-assignment between the two branches.
+    ais_source: Any
     if settings.aisstream_api_key:
         ais_source = AISStreamSource(get_pos=get_pos, api_key=settings.aisstream_api_key)
     else:
@@ -301,6 +306,9 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
     elif autoroute_needed:
         tasks.append(autoroute_bg())
     if writer is not None:
+        # writer.token is only None before connect() succeeds; by this point
+        # the writer has already connected (see caller), so it's always set.
+        assert writer.token is not None
         cmd_src = SignalKCommandSource(
             settings.signalk_host, settings.signalk_port, writer.token,
             EngineCommandSink(engine), lambda: (0.0, 0.0))

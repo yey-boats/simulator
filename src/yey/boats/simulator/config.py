@@ -80,7 +80,7 @@ class Settings:
         for k, v in env_map.items():
             if v is not None:
                 setattr(base, k, v)
-        for k, v in overrides.items():
-            if v is not None and hasattr(base, k):
-                setattr(base, k, v)
+        for key, val in overrides.items():
+            if val is not None and hasattr(base, key):
+                setattr(base, key, val)
         return base

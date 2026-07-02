@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.2", "pytest-asyncio>=0.23", "pytest-aiohttp>=1.0", "ruff>=0.5"]
+dev = ["pytest>=8.2", "pytest-asyncio>=0.23", "pytest-aiohttp>=1.0", "ruff>=0.5", "mypy>=1.10"]
 
 [project.scripts]
 yey-boats-sim = "yey.boats.simulator.cli:main"
@@ -45,4 +45,16 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "B", "UP", "SIM", "C4"]
+
+# Non-strict start (SIM-3): the codebase has full type-hint coverage but was
+# never checked. mypy_path/explicit_package_bases avoids "found twice under
+# different module names" for the src/ layout (yey.boats.simulator is a real
+# package under an implicit-namespace-package parent). Tighten (strict mode,
+# fewer ignores) iteratively as surfaced errors get fixed.
+[tool.mypy]
+mypy_path = "src"
+packages = ["yey.boats.simulator"]
+explicit_package_bases = true
+ignore_missing_imports = true
+warn_unused_ignores = false
 

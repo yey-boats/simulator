@@ -918,7 +918,10 @@ class SignalKWriter:
     def __init__(self, host: str, port: int) -> None:
         self._host  = host
         self._port  = port
-        self._ws    = None
+        # Any: the concrete websockets connection type varies by version/path
+        # (sync context-manager `connect` object vs. the awaited ClientConnection);
+        # non-strict start for SIM-3, tighten once the rest of the codebase is typed.
+        self._ws: Any = None
         self._token: str | None = None
         self._queue: asyncio.Queue = asyncio.Queue(maxsize=60)  # ~60s buffer
 

@@ -13,6 +13,7 @@ jobs:
           python-version: "3.13"
       - run: pip install -e ".[dev]"
       - run: ruff check src tests
+      - run: mypy
       - run: pytest -q
       - uses: actions/setup-node@v4
         with:

@@ -70,6 +70,7 @@ class GeoGrid:
 
     # ── persistence ──────────────────────────────────────────────────────
     def _load(self) -> None:
+        assert self._cache_path is not None  # only called when set (see __init__)
         raw = json.loads(self._cache_path.read_text())
         self._elev = {(int(k.split(",")[0]), int(k.split(",")[1])): float(v)
                       for k, v in raw.items()}
@@ -91,7 +92,9 @@ class GeoGrid:
             lat0, lon0 = self._corner(c00)
             u = (lat - lat0) / self._cell           # 0..1 across latitude
             t = (lon - lon0) / self._cell           # 0..1 across longitude
-            v00, v10, v01, v11 = vals               # type: ignore[misc]
+            # all() above confirmed none of these are None; float() gives mypy
+            # a concrete type without weakening the None-check above.
+            v00, v10, v01, v11 = (float(v) for v in vals)  # type: ignore[arg-type]
             return ((1 - u) * (1 - t) * v00 + u * (1 - t) * v10
                     + (1 - u) * t * v01 + u * t * v11)
         # miss: queue the four corners; return nearest cached / fallback
