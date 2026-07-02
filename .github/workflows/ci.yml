@@ -28,13 +28,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t yey-boats-simulator:ci .
-      - name: run a few ticks via stdout sink
+      - name: run a few ticks via stdout sink and verify steady state
         run: |
-          docker run --rm --entrypoint yey-boats-sim \
+          set -eu
+          cid=$(docker run -d --entrypoint yey-boats-sim \
             -e DATA_DIR=/tmp yey-boats-simulator:ci \
-            --sink stdout --no-failover &
+            --sink stdout --no-failover)
           sleep 45
-          echo "smoke run launched (depth fetch dominates first run)"
+          echo "--- container logs ---"
+          docker logs "$cid" || true
+
+          running=$(docker inspect -f '{{.State.Running}}' "$cid")
+          if [ "$running" != "true" ]; then
+            echo "::error::container is not running after 45s (crashed/exited)"
+            docker inspect -f 'status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}' "$cid"
+            docker rm -f "$cid" >/dev/null 2>&1 || true
+            exit 1
+          fi
+
+          # "[sink] active: <name>" is printed once SinkChain.open() succeeds
+          # (adapters/failover.py) — the steady-state marker for this smoke test.
+          if ! docker logs "$cid" 2>&1 | grep -q '\[sink\] active:'; then
+            echo "::error::container never reached steady state ([sink] active: marker not seen in logs)"
+            docker rm -f "$cid" >/dev/null 2>&1 || true
+            exit 1
+          fi
+
+          echo "container is running and reached steady state"
+          docker rm -f "$cid"
 
   # Publish a multi-arch image to GHCR on every green push to main, so the lab
   # deployment can pull a fresh build (ghcr.io/yey-boats/simulator:latest|main|sha-<short>).
