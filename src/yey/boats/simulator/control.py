@@ -86,6 +86,7 @@ class SimController:
             if v is not None and hasattr(self._settings, k):
                 setattr(self._settings, k, v)
         self._settings.save(self._data_dir / "config.json")
+        self._settings.warn_if_insecure_credentials()
         self._restart.set()
 
     async def apply_route(self, route) -> None:

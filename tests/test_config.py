@@ -47,3 +47,33 @@ def test_boat_geometry_single_source():
     from yey.boats.simulator.engine import signalk_writer
     assert signalk_writer.DRAFT_M == config.DEFAULT_BOAT_DRAFT_M
     assert signalk_writer.TRANSDUCER_DEPTH_M == config.DEFAULT_TRANSDUCER_DEPTH_M
+
+
+# ── SIM-5: default admin/admin credentials against a non-localhost host ─────
+
+def test_warns_on_default_password_against_non_localhost_host(capsys):
+    s = Settings(signalk_host="lab-server.example.com", signalk_password="admin")  # noqa: S106
+    s.warn_if_insecure_credentials()
+    err = capsys.readouterr().err
+    assert "WARNING" in err
+    assert "SIGNALK_PASSWORD" in err
+
+
+def test_no_warning_on_localhost_with_default_password(capsys):
+    s = Settings(signalk_host="localhost", signalk_password="admin")  # noqa: S106
+    s.warn_if_insecure_credentials()
+    assert capsys.readouterr().err == ""
+
+
+def test_no_warning_on_non_localhost_with_custom_password(capsys):
+    s = Settings(signalk_host="lab-server.example.com", signalk_password="s3cr3t")  # noqa: S106
+    s.warn_if_insecure_credentials()
+    assert capsys.readouterr().err == ""
+
+
+def test_from_env_warns_for_non_localhost_default_creds(monkeypatch, capsys):
+    monkeypatch.setenv("SIGNALK_HOST", "lab-server.example.com")
+    monkeypatch.delenv("SIGNALK_PASSWORD", raising=False)
+    Settings.from_env()
+    err = capsys.readouterr().err
+    assert "WARNING" in err

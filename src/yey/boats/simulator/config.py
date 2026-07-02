@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -42,6 +43,20 @@ class Settings:
         d = {k: getattr(self, k) for k in self._PERSIST_KEYS}
         d["data_dir"] = str(self.data_dir)
         return d
+
+    def warn_if_insecure_credentials(self) -> None:
+        """SIM-5: admin/admin is a fine default for localhost dev, but the
+        GHCR publish pipeline makes shared/lab deployments plausible — warn
+        loudly at startup so an operator pointing at a non-localhost SignalK
+        server notices the unset password instead of silently running with
+        the documented default."""
+        if self.signalk_password == "admin" and self.signalk_host != "localhost":  # noqa: S105
+            print(
+                f"[config] WARNING: SIGNALK_PASSWORD is unset (using the default "
+                f"'admin' password) while signalk_host={self.signalk_host!r} is not "
+                f"'localhost'. Set SIGNALK_PASSWORD (and SIGNALK_USERNAME) before "
+                f"running against a shared/lab SignalK server.",
+                file=sys.stderr, flush=True)
 
     def save(self, path) -> None:
         p = Path(path)
@@ -83,4 +98,5 @@ class Settings:
         for key, val in overrides.items():
             if val is not None and hasattr(base, key):
                 setattr(base, key, val)
+        base.warn_if_insecure_credentials()
         return base
