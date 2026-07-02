@@ -112,7 +112,11 @@ class GeoGrid:
                 pts = [self._corner(c) for c in cells]
                 try:
                     elevs = await asyncio.to_thread(self._fetch, pts)
-                    for c, e in zip(cells, elevs):
+                    # Materialize the pairing (and let strict=True raise) before
+                    # writing anything, so a length mismatch can't leave the
+                    # cache partially/misalignedly populated.
+                    pairs = list(zip(cells, elevs, strict=True))
+                    for c, e in pairs:
                         self._elev[c] = e
                         self._misses.discard(c)
                     self.save()
@@ -137,6 +141,9 @@ class GeoGrid:
             return
         cells = list(want.keys())
         elevs = self._fetch([want[c] for c in cells])
-        for c, e in zip(cells, elevs):
+        # See fetch_loop(): materialize before writing so a length mismatch
+        # raises without corrupting the cache.
+        pairs = list(zip(cells, elevs, strict=True))
+        for c, e in pairs:
             self._elev[c] = e
             self._misses.discard(c)
