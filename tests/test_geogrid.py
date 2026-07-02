@@ -89,6 +89,46 @@ def test_geogrid_cache_path(tmp_path):
     assert tmp_path.exists()
 
 
+def test_sample_raises_on_short_fetch_result_and_leaves_cache_untouched():
+    """SIM-1 regression: a partial fetcher response must not silently pair
+    the wrong elevation with the wrong cell (bare zip() truncates instead of
+    raising). strict=True must surface the mismatch and the cache must stay
+    empty rather than being corrupted with misaligned values."""
+    def short_fetcher(points):
+        return [-30.0 for _ in points][:-1]  # one fewer than requested
+
+    g = GeoGrid(fetcher=short_fetcher, cell_deg=0.02)
+    with pytest.raises(ValueError):
+        g.sample([(45.00, 13.00), (45.00, 13.02), (45.02, 13.00), (45.02, 13.02)])
+    assert g._elev == {}  # nothing partially/incorrectly written
+
+
+@pytest.mark.asyncio
+async def test_fetch_loop_raises_on_short_fetch_result_leaves_misses_queued():
+    """Same as above but via the background fetch_loop() path: the existing
+    `except Exception` handler should catch the strict=True ValueError and
+    degrade gracefully (log + retry) instead of writing misaligned data or
+    calling save()."""
+    def short_fetcher(points):
+        return [-20.0 for _ in points][:-1]
+
+    g = GeoGrid(fetcher=short_fetcher, cell_deg=0.02)
+    g.depth_at(45.0, 13.0)  # miss -> queued
+    assert g._misses
+    pending_before = set(g._misses)
+
+    task = asyncio.create_task(g.fetch_loop(interval=100.0))
+    await asyncio.sleep(0.05)  # let one fetch attempt run and fail
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    assert g._elev == {}                       # no misaligned writes
+    assert g._misses == pending_before          # still queued for retry
+
+
 def test_opentopo_fetch_honors_env_url(monkeypatch):
     """GEOGRID_API_URL repoints the fetcher at a self-hosted server, and the
     public-only inter-batch sleep is skipped for a custom URL."""

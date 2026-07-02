@@ -305,7 +305,7 @@ def _fetch_depth_profile(waypoints: list[Waypoint],
         url = f"https://api.opentopodata.org/v1/gebco2020?locations={locs}"
         resp = httpx.get(url, timeout=30)
         resp.raise_for_status()
-        for pt, r in zip(batch, resp.json()["results"]):
+        for pt, r in zip(batch, resp.json()["results"], strict=True):
             elev = r.get("elevation") or 0
             results.append({"lat": pt[0], "lon": pt[1],
                             "depth_m": max(0.0, -elev)})

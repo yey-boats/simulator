@@ -213,7 +213,7 @@ async def test_route_following_leg_heading_wanders_and_rudder_works():
     # emitted heading stays within the analytic wander envelope of the
     # commanded leg heading, so real course changes between legs are preserved.
     bound = WANDER_AMP1_DEG + WANDER_AMP2_DEG + WANDER_RIPPLE_DEG + 1e-6
-    for emitted, cmd in zip(headings, commanded):
+    for emitted, cmd in zip(headings, commanded, strict=True):
         offset = ((emitted - cmd + 180) % 360) - 180
         assert abs(offset) <= bound, (
             f"emitted heading {emitted:.3f} strayed beyond the wander envelope "
