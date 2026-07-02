@@ -38,16 +38,6 @@ def route_kmz() -> Path:
     return _bundled("adriatic.kmz")
 
 
-def depth_cache_path(data_dir: Path) -> Path:
-    """Path to the runtime depth-profile cache inside the writable data dir.
-
-    Creates *data_dir* (and any missing parents) if it does not already exist.
-    """
-    data_dir = Path(data_dir)
-    data_dir.mkdir(parents=True, exist_ok=True)
-    return data_dir / "depth_profile.json"
-
-
 def geogrid_cache_path(data_dir: Path) -> Path:
     """Path to the lazily-built GEBCO grid cache inside the writable data dir."""
     data_dir = Path(data_dir)

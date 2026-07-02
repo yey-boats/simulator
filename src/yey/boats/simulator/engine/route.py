@@ -3,11 +3,9 @@
 from __future__ import annotations
 import json
 import math
-import sys
 import zipfile
 import pathlib
-from dataclasses import dataclass, field
-import httpx  # type: ignore[import]
+from dataclasses import dataclass
 
 R_NM = 3440.065  # Earth radius in nautical miles
 
@@ -61,7 +59,6 @@ class Waypoint:
 class Route:
     waypoints: list[Waypoint]
     current_index: int = 0
-    _depth_profile: list[dict] = field(default_factory=list, repr=False)
 
     @classmethod
     def load(cls, kmz_path: pathlib.Path, marinas_path: pathlib.Path) -> Route:
@@ -245,36 +242,6 @@ class Route:
         from pathlib import Path
         return cls.from_waypoint_dicts(json.loads(Path(path).read_text()))
 
-    def load_depth_profile(self, cache_path: pathlib.Path,
-                           samples_per_leg: int = 8) -> None:
-        """Load depth profile from cache, or fetch from OpenTopoData and save.
-
-        On a fetch/parse failure (e.g. offline or rate-limited first boot) the
-        profile degrades to empty — depth_at() then returns a 50 m default —
-        instead of crashing the simulator. No cache is written on failure, so a
-        later run with connectivity can still populate it.
-        """
-        if cache_path.exists():
-            self._depth_profile = json.loads(cache_path.read_text())
-            return
-        try:
-            self._depth_profile = _fetch_depth_profile(self.waypoints, samples_per_leg)
-        except Exception as exc:  # noqa: BLE001
-            msg = (f"[route] depth profile fetch failed ({exc!r}); "
-                   f"using default depth (50 m)")
-            print(msg, file=sys.stderr, flush=True)  # noqa: T201
-            self._depth_profile = []
-            return
-        cache_path.write_text(json.dumps(self._depth_profile, indent=2))
-
-    def depth_at(self, lat: float, lon: float) -> float:
-        """Interpolate depth (metres, positive = below surface) from profile."""
-        if not self._depth_profile:
-            return 50.0  # fallback
-        best = min(self._depth_profile,
-                   key=lambda p: haversine_nm(lat, lon, p["lat"], p["lon"]))
-        return best["depth_m"]
-
 
 def _extract_kml(kmz_path: pathlib.Path) -> str:
     with zipfile.ZipFile(kmz_path) as zf:
@@ -282,33 +249,3 @@ def _extract_kml(kmz_path: pathlib.Path) -> str:
         if kml_name is None:
             raise ValueError(f"No .kml entry found in {kmz_path}")
         return zf.read(kml_name).decode("utf-8")
-
-
-def _fetch_depth_profile(waypoints: list[Waypoint],
-                         samples_per_leg: int) -> list[dict]:
-    """Fetch GEBCO depths via OpenTopoData. Rate: ≤1 req/s, ≤100 locs/req."""
-    import time
-    points = []
-    for i in range(len(waypoints)):
-        a = waypoints[i]
-        b = waypoints[(i + 1) % len(waypoints)]
-        for k in range(samples_per_leg):
-            α = k / samples_per_leg
-            points.append((a.lat + α * (b.lat - a.lat),
-                           a.lon + α * (b.lon - a.lon)))
-
-    results = []
-    batch_size = 100
-    for i in range(0, len(points), batch_size):
-        batch = points[i:i + batch_size]
-        locs = "|".join(f"{lat:.5f},{lon:.5f}" for lat, lon in batch)
-        url = f"https://api.opentopodata.org/v1/gebco2020?locations={locs}"
-        resp = httpx.get(url, timeout=30)
-        resp.raise_for_status()
-        for pt, r in zip(batch, resp.json()["results"], strict=True):
-            elev = r.get("elevation") or 0
-            results.append({"lat": pt[0], "lon": pt[1],
-                            "depth_m": max(0.0, -elev)})
-        if i + batch_size < len(points):
-            time.sleep(1.1)
-    return results
