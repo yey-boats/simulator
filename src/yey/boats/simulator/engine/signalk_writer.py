@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import json
 import math
-import urllib.request
 from datetime import datetime, timezone
 from typing import Any
 import websockets  # type: ignore[import]
@@ -911,13 +910,21 @@ class SignalKWriter:
         self._queue: asyncio.Queue = asyncio.Queue(maxsize=60)  # ~60s buffer
 
     async def connect(self, username: str, password: str) -> None:
-        req = urllib.request.Request(
-            f"http://{self._host}:{self._port}/signalk/v1/auth/login",
-            data=json.dumps({"username": username, "password": password}).encode(),
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=10) as r:  # noqa: S310
-            self._token = json.loads(r.read())["token"]
+        import httpx  # type: ignore[import]
+
+        # SIM-2: was a blocking urllib.request.urlopen() call inside this
+        # coroutine, which froze the event loop for up to 10s. httpx.AsyncClient
+        # keeps this non-blocking, matching the rest of the codebase (e.g.
+        # geogrid.py uses asyncio.to_thread, get_self_position() below uses
+        # httpx.AsyncClient directly).
+        async with httpx.AsyncClient() as client:
+            r = await client.post(
+                f"http://{self._host}:{self._port}/signalk/v1/auth/login",
+                json={"username": username, "password": password},
+                timeout=10,
+            )
+            r.raise_for_status()
+            self._token = r.json()["token"]
         uri = (f"ws://{self._host}:{self._port}/signalk/v1/stream"
                f"?subscribe=none&token={self._token}")
         self._ws = await websockets.connect(uri)
