@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 import json
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from yey.boats.simulator.engine.navigator import NavState  # type: ignore[import]
 from yey.boats.simulator.engine.schedule import SimState  # type: ignore[import]
@@ -27,7 +27,7 @@ async def test_stdout_sink_emits_json(capsys):
     nav.log_nm = 12.345
     snap = TelemetrySnapshot(
         nav=nav, elec=_Elec(), sys=_Sys(), lights=object(), wx=_Wx(),
-        state=SimState.SAILING, utc_now=datetime.now(timezone.utc), temps={},
+        state=SimState.SAILING, utc_now=datetime.now(UTC), temps={},
         next_wp=("Pula", 44.87, 13.84), route_href="", point_index=0,
         distance_to_next_nm=7.3)
     sink = StdoutJsonSink()

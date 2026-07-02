@@ -15,7 +15,7 @@ SignalKSink.publish().
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from unittest.mock import MagicMock
 
 import pytest  # type: ignore[import]
@@ -101,7 +101,7 @@ def _make_delta(current=None) -> dict:
     return _build_vessel_delta(
         _nav(), _stub_elec(), _stub_sys(), _stub_lights(),
         _stub_wx(), SimState.MOTORED,
-        datetime(2025, 6, 18, 12, 0, 0, tzinfo=timezone.utc),
+        datetime(2025, 6, 18, 12, 0, 0, tzinfo=UTC),
         _stub_temps(),
         current=current,
     )
@@ -162,7 +162,7 @@ class FakeWriter:
 def _snap(current_set_deg: float = 0.0, current_drift_kts: float = 0.0) -> TelemetrySnapshot:
     return TelemetrySnapshot(
         nav=_nav(), elec=object(), sys=object(), lights=object(), wx=object(),
-        state=SimState.SAILING, utc_now=datetime.now(timezone.utc), temps={},
+        state=SimState.SAILING, utc_now=datetime.now(UTC), temps={},
         next_wp=("Pula", 44.87, 13.84), route_href="/r", point_index=0,
         polars=None, autopilot=None, ais_contacts=[],
         current_set_deg=current_set_deg,

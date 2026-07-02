@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from pathlib import Path
 
 import pytest  # type: ignore[import]
@@ -120,10 +121,8 @@ async def test_fetch_loop_raises_on_short_fetch_result_leaves_misses_queued():
     task = asyncio.create_task(g.fetch_loop(interval=100.0))
     await asyncio.sleep(0.05)  # let one fetch attempt run and fail
     task.cancel()
-    try:
+    with contextlib.suppress(asyncio.CancelledError):
         await task
-    except asyncio.CancelledError:
-        pass
 
     assert g._elev == {}                       # no misaligned writes
     assert g._misses == pending_before          # still queued for retry

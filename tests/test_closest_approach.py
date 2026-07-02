@@ -16,7 +16,7 @@ from yey.boats.simulator.engine.snapshot import AisContact
 # ---------------------------------------------------------------------------
 # Minimal stubs for the parts of _build_vessel_delta we don't care about
 # ---------------------------------------------------------------------------
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from unittest.mock import MagicMock
 
 from yey.boats.simulator.engine.navigator import NavState
@@ -113,7 +113,7 @@ def _build(contacts):
     return _build_vessel_delta(
         nav, _stub_elec(), _stub_sys(), _stub_lights(),
         _stub_wx(), SimState.MOTORED,
-        datetime.now(timezone.utc), _stub_temps(),
+        datetime.now(UTC), _stub_temps(),
         closest_approach=closest,
     )
 

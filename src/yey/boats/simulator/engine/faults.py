@@ -18,7 +18,7 @@ without an explicit severity uses ``DEFAULT_SEVERITY`` (full strength).
 from __future__ import annotations
 
 import os
-from typing import Iterable
+from collections.abc import Iterable
 
 # Canonical fault ids. Each maps to one modeled deviation (see signalk_writer /
 # the engine models for where each is consumed).

@@ -8,8 +8,10 @@ jump back to the route origin.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any
+from collections.abc import Awaitable, Callable
 
 PipelineFn = Callable[..., Awaitable[None]]
 
@@ -20,10 +22,10 @@ class SimController:
         self._route = route
         self._data_dir = Path(data_dir)
         self._pipeline = pipeline
-        self._task: Optional[asyncio.Task] = None
-        self._last_pos: Optional[tuple[float, float]] = None
+        self._task: asyncio.Task | None = None
+        self._last_pos: tuple[float, float] | None = None
         self._restart = asyncio.Event()
-        self._last_error: Optional[str] = None
+        self._last_error: str | None = None
         self._tick = 0
         self._connected = False
 
@@ -71,10 +73,8 @@ class SimController:
                 await asyncio.sleep(1.0)      # brief backoff, then relaunch
             else:                            # restart requested
                 self._task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError):
                     await self._task
-                except asyncio.CancelledError:
-                    pass
 
     async def _run_once(self) -> None:
         await self._pipeline(self._settings, self._route,

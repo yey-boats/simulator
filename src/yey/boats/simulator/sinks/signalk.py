@@ -10,6 +10,7 @@ Position-resume and route-resource registration are performed by the runner via
 """
 from __future__ import annotations
 
+import contextlib
 import math
 from typing import Any
 
@@ -78,10 +79,8 @@ class SignalKSink:
                                           c.sog_kts, c.name, c.ship_type)
         if self._last_point_index is not None and snapshot.point_index != self._last_point_index:
             steps = snapshot.point_index - self._last_point_index
-            try:
+            with contextlib.suppress(Exception):  # noqa: BLE001,S110
                 await self.writer.advance_active_point(steps if steps > 0 else 1)
-            except Exception:  # noqa: BLE001,S110
-                pass
         self._last_point_index = snapshot.point_index
 
     async def close(self) -> None:

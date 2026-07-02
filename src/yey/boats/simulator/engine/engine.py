@@ -113,7 +113,9 @@ class Engine:
 
         if self.sched.lookahead_due:
             try:
-                if await self._data.twd_shift_next_6h(self.nav_state.lat, self.nav_state.lon, now) > 15:
+                shift = await self._data.twd_shift_next_6h(
+                    self.nav_state.lat, self.nav_state.lon, now)
+                if shift > 15:
                     self.sched._tack_timer_s = 9999
             except Exception:
                 pass
@@ -121,7 +123,8 @@ class Engine:
 
         if self.sched.state in (SimState.MOORED, SimState.BORA_HOLD):
             try:
-                mean_tws = await self._data.mean_tws_next_6h(self.nav_state.lat, self.nav_state.lon, now)
+                mean_tws = await self._data.mean_tws_next_6h(
+                    self.nav_state.lat, self.nav_state.lon, now)
             except Exception:
                 mean_tws = tws
             self.sched.try_depart(now, twd, mean_tws)

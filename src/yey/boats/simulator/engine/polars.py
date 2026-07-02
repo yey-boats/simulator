@@ -52,10 +52,10 @@ class Polars:
         s01 = self._speeds[i_tws,     i_twa + 1]
         s10 = self._speeds[i_tws + 1, i_twa]
         s11 = self._speeds[i_tws + 1, i_twa + 1]
-        return float((s00 * (1 - α_twa) * (1 - α_tws) +
+        return float(s00 * (1 - α_twa) * (1 - α_tws) +
                       s01 * α_twa       * (1 - α_tws) +
                       s10 * (1 - α_twa) * α_tws +
-                      s11 * α_twa       * α_tws))
+                      s11 * α_twa       * α_tws)
 
     def best_vmg_upwind_twa(self, tws_kts: float) -> float:
         """TWA (degrees) giving max VMG toward wind (upwind)."""

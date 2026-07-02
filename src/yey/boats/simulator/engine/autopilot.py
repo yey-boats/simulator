@@ -126,7 +126,8 @@ class Autopilot:
             if s.mode == "wind" and s.target_wind_angle_deg is not None:
                 s.target_wind_angle_deg = -s.target_wind_angle_deg
             else:
-                base = s.target_heading_deg if s.target_heading_deg is not None else current_heading_deg
+                base = (s.target_heading_deg if s.target_heading_deg is not None
+                        else current_heading_deg)
                 s.target_heading_deg = _norm360(2 * twd_deg - base)
                 s.mode = "auto"
                 s.engaged = True

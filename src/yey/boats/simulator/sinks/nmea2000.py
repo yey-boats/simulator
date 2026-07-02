@@ -6,7 +6,8 @@ from __future__ import annotations
 from yey.boats.simulator.engine.snapshot import TelemetrySnapshot  # type: ignore[import]
 
 _ROADMAP = ("NMEA 2000 sink is planned for Phase C (PGN encoding over "
-            "CAN/serial/stdout). See docs/superpowers/specs/2026-06-13-simulator-extraction-design.md")
+            "CAN/serial/stdout). See "
+            "docs/superpowers/specs/2026-06-13-simulator-extraction-design.md")
 
 
 class NMEA2000Sink:

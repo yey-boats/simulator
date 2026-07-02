@@ -14,7 +14,7 @@ firmware does not subscribe to.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from unittest.mock import MagicMock
 
 import pytest  # type: ignore[import]
@@ -102,7 +102,7 @@ def _delta(*, nav: NavState | None = None, wx_temp_c: float = 20.0,
     return _build_vessel_delta(
         nav or _nav(), _stub_elec(), _stub_sys(), _stub_lights(),
         _stub_wx(wx_temp_c), SimState.SAILING,
-        datetime(2025, 6, 18, 12, 0, 0, tzinfo=timezone.utc),
+        datetime(2025, 6, 18, 12, 0, 0, tzinfo=UTC),
         _stub_temps(), next_wp=next_wp, prev_wp=prev_wp,
     )
 
@@ -223,7 +223,7 @@ async def test_sink_forwards_prev_wp():
     sink = SignalKSink(writer=fake)
     snap = TelemetrySnapshot(
         nav=_nav(), elec=object(), sys=object(), lights=object(), wx=object(),
-        state=SimState.SAILING, utc_now=datetime.now(timezone.utc), temps={},
+        state=SimState.SAILING, utc_now=datetime.now(UTC), temps={},
         next_wp=("B", 45.1, 13.0), prev_wp=("A", 45.0, 13.0),
         route_href="/r", point_index=1, polars=None, autopilot=None,
         ais_contacts=[],

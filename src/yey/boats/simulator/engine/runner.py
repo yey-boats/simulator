@@ -13,7 +13,7 @@ import asyncio
 import os
 import random
 import time
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from yey.boats.simulator import resources  # type: ignore[import]
 from yey.boats.simulator.config import Settings  # type: ignore[import]
@@ -180,7 +180,8 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
     if writer is not None:
         try:
             await writer.put_route_resource(ROUTE_UUID, _route_to_geojson(route))
-            await writer.put_active_route(ROUTE_UUID, (route.current_index + 1) % len(route.waypoints))
+            next_index = (route.current_index + 1) % len(route.waypoints)
+            await writer.put_active_route(ROUTE_UUID, next_index)
         except Exception as exc:
             print(f"[sim] route resource upload failed (non-fatal): {exc!r}", flush=True)
 
@@ -242,7 +243,7 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
         while True:
             await _apply_pending_route()   # between ticks: safe swap point
             t0 = time.monotonic()
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             snap = await engine.tick(now)
             await chain.publish(snap)
             # chain.active may change over the run (failover); recompute each tick.
@@ -278,7 +279,8 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
         dest: tuple[float, float] | None = None
         while True:
             pos = (engine.nav_state.lat, engine.nav_state.lon)
-            near = dest is not None and distance_nm(pos[0], pos[1], dest[0], dest[1]) <= passage_arrival_nm
+            near = (dest is not None
+                   and distance_nm(pos[0], pos[1], dest[0], dest[1]) <= passage_arrival_nm)
             if (dest is None or near) and "item" not in pending_route:
                 wps = await asyncio.to_thread(
                     make_passage, pos[0], pos[1], rgrid, route_cfg,

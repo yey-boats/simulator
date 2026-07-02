@@ -49,7 +49,7 @@ class Settings:
         p.write_text(json.dumps(self.to_dict(), indent=2))
 
     @classmethod
-    def from_file(cls, path) -> "Settings":
+    def from_file(cls, path) -> Settings:
         p = Path(path)
         if not p.exists():
             return cls()
@@ -60,12 +60,13 @@ class Settings:
         return cls(**known)
 
     @classmethod
-    def from_env(cls, *, config_path=None, **overrides: object) -> "Settings":
+    def from_env(cls, *, config_path=None, **overrides: object) -> Settings:
         # precedence (low -> high): defaults < file < env < cli(overrides)
         base = cls.from_file(config_path) if config_path is not None else cls()
         env_map = {
             "signalk_host": os.environ.get("SIGNALK_HOST"),
-            "signalk_port": (int(os.environ["SIGNALK_PORT"]) if "SIGNALK_PORT" in os.environ else None),
+            "signalk_port": (int(os.environ["SIGNALK_PORT"])
+                            if "SIGNALK_PORT" in os.environ else None),
             "signalk_username": os.environ.get("SIGNALK_USERNAME"),
             "signalk_password": os.environ.get("SIGNALK_PASSWORD"),
             "aisstream_api_key": (os.environ.get("AISSTREAM_API_KEY", "").strip() or None),
@@ -73,7 +74,8 @@ class Settings:
             "weather_source": os.environ.get("WEATHER_SOURCE"),
             "failover": (os.environ["SINK_FAILOVER"] not in ("0", "false", "False")
                          if "SINK_FAILOVER" in os.environ else None),
-            "data_dir": (Path(os.environ["DATA_DIR"]).resolve() if "DATA_DIR" in os.environ else None),
+            "data_dir": (Path(os.environ["DATA_DIR"]).resolve()
+                        if "DATA_DIR" in os.environ else None),
         }
         for k, v in env_map.items():
             if v is not None:
