@@ -13,7 +13,7 @@ from yey.boats.simulator.engine.command_listener import CommandHandler, CommandL
 
 
 class SignalKCommandSource:
-    def __init__(self, host: str, port: int, token: str | None, autopilot: Any,
+    def __init__(self, host: str, port: int, token: str, autopilot: Any,
                  wind_fn: Callable[[], tuple[float, float]]) -> None:
         self.handler = CommandHandler(autopilot, wind_fn)
         self._listener = CommandListener(host, port, token, self.handler)
