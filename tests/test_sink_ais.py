@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 import json
 import math
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 import pytest  # type: ignore[import]
 
@@ -22,7 +22,7 @@ def _nav():
 def _snap(point_index=0, contacts=None):
     return TelemetrySnapshot(
         nav=_nav(), elec=object(), sys=object(), lights=object(), wx=object(),
-        state=SimState.SAILING, utc_now=datetime.now(timezone.utc), temps={},
+        state=SimState.SAILING, utc_now=datetime.now(UTC), temps={},
         next_wp=("Pula", 44.87, 13.84), route_href="/r", point_index=point_index,
         ais_contacts=contacts or [])
 

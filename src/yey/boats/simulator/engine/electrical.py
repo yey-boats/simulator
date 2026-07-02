@@ -4,7 +4,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict
 from yey.boats.simulator.engine.schedule import SimState
 
 BATTERY_WH      = 14400.0   # 1200 Ah × 12 V
@@ -34,7 +33,7 @@ class ElecState:
     inverter_state: str
     genset_state: str
     genset_rpm: float
-    loads: Dict[str, float]
+    loads: dict[str, float]
     net_w: float
 
     @property
@@ -116,7 +115,7 @@ class Electrical:
     # ── loads ─────────────────────────────────────────────────────────────────
     def _compute_loads(self, sim_state: SimState,
                        local_frac: float, is_night: bool,
-                       dt_s: float = 1.0) -> Dict[str, float]:
+                       dt_s: float = 1.0) -> dict[str, float]:
         def in_window(*windows) -> bool:
             return any(a <= local_frac < b for a, b in windows)
 

@@ -71,9 +71,9 @@ def make_app(controller, token: str | None) -> web.Application:
 
     @web.middleware
     async def auth(request, handler):
-        if token is not None and request.path.startswith("/api/"):
-            if request.headers.get("X-Sim-Token") != token:
-                return web.json_response({"error": "unauthorized"}, status=401)
+        if (token is not None and request.path.startswith("/api/")
+                and request.headers.get("X-Sim-Token") != token):
+            return web.json_response({"error": "unauthorized"}, status=401)
         return await handler(request)
 
     app.middlewares.append(auth)

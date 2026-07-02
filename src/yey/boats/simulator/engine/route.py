@@ -142,7 +142,7 @@ class Route:
         return [{"name": w.name, "lat": w.lat, "lon": w.lon} for w in self.waypoints]
 
     @classmethod
-    def from_waypoint_dicts(cls, wps: list[dict]) -> "Route":
+    def from_waypoint_dicts(cls, wps: list[dict]) -> Route:
         from yey.boats.simulator.routeio import validate_waypoints
         valid = validate_waypoints(wps)
         objs = [Waypoint(name=w["name"], lat=w["lat"], lon=w["lon"],
@@ -240,7 +240,7 @@ class Route:
         Path(path).write_text(json.dumps(self.to_waypoint_dicts(), indent=2))
 
     @classmethod
-    def load_json(cls, path) -> "Route":
+    def load_json(cls, path) -> Route:
         import json
         from pathlib import Path
         return cls.from_waypoint_dicts(json.loads(Path(path).read_text()))

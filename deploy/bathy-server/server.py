@@ -29,7 +29,7 @@ LAT_MIN = float(os.environ.get("BATHY_LAT_MIN", "36.0"))
 LAT_MAX = float(os.environ.get("BATHY_LAT_MAX", "46.0"))
 LON_MIN = float(os.environ.get("BATHY_LON_MIN", "12.0"))
 LON_MAX = float(os.environ.get("BATHY_LON_MAX", "20.0"))
-STRIDE = int(os.environ.get("BATHY_STRIDE", "5"))         # ERDDAP index stride (GEBCO node = 1/240 deg)
+STRIDE = int(os.environ.get("BATHY_STRIDE", "5"))  # ERDDAP index stride (GEBCO node = 1/240 deg)
 PORT = int(os.environ.get("BATHY_PORT", "8089"))
 CACHE_PATH = os.environ.get("BATHY_CACHE", "/data/bathy_grid.json")
 ERDDAP = os.environ.get(

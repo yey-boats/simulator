@@ -43,3 +43,6 @@ testpaths = ["tests"]
 target-version = "py312"
 line-length = 100
 
+[tool.ruff.lint]
+select = ["E", "F", "B", "UP", "SIM", "C4"]
+

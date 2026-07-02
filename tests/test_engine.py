@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 import pytest  # type: ignore[import]
 
@@ -39,7 +39,7 @@ def _engine():
 @pytest.mark.asyncio
 async def test_tick_returns_snapshot_with_contacts():
     eng = _engine()
-    now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=UTC)
     snap = await eng.tick(now)
     assert isinstance(snap, TelemetrySnapshot)  # noqa: S101
     assert snap.utc_now == now  # noqa: S101
@@ -51,7 +51,7 @@ async def test_tick_returns_snapshot_with_contacts():
 async def test_submitted_command_reaches_autopilot():
     eng = _engine()
     eng.submit_command("disengage", None)
-    now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=UTC)
     await eng.tick(now)
     assert eng.autopilot.state.mode != "route"  # noqa: S101
 
@@ -67,7 +67,7 @@ async def test_command_sink_shim_enqueues():
 @pytest.mark.asyncio
 async def test_tick_emits_diagnostic_signal_fields():
     eng = _engine()
-    now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=UTC)
     snap = await eng.tick(now)
     # All Phase-3 diagnostic fields are populated every tick.
     assert snap.oil_pressure_pa is not None  # noqa: S101
@@ -85,7 +85,7 @@ async def test_set_and_clear_fault_command_toggles_faultstate():
     eng.submit_command("set_fault", "gps_degraded")
     assert eng.faults.is_active("gps_degraded")  # noqa: S101
     assert eng._cmd_queue == []  # not forwarded to autopilot  # noqa: S101
-    now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=UTC)
     snap = await eng.tick(now)
     assert snap.gnss_quality == "no GNSS"  # noqa: S101
     assert snap.gnss_position_jitter_deg is not None  # noqa: S101

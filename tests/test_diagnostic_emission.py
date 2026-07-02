@@ -7,7 +7,7 @@ kwargs, and are OMITTED by default (None) — exactly like propulsion.main.runTi
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from unittest.mock import MagicMock
 
 import pytest  # type: ignore[import]
@@ -94,7 +94,7 @@ def _stub_temps():
 def _delta(**kw):
     return _build_vessel_delta(
         _nav(), _stub_elec(), _stub_sys(), _stub_lights(), _stub_wx(),
-        SimState.MOTORED, datetime(2025, 6, 18, 12, 0, tzinfo=timezone.utc),
+        SimState.MOTORED, datetime(2025, 6, 18, 12, 0, tzinfo=UTC),
         _stub_temps(), **kw)
 
 

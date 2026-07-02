@@ -33,16 +33,7 @@ def build_sink_chain(settings: Settings) -> SinkChain:
         return SinkChain([primary])
     chain = [primary]
     # Failover: SignalK@localhost, then stdout (skip duplicates of primary).
-    if settings.sink != "signalk":
-        chain.append(
-            SignalKSink(
-                "localhost",
-                settings.signalk_port,
-                settings.signalk_username,
-                settings.signalk_password,
-            )
-        )
-    elif settings.signalk_host != "localhost":
+    if settings.sink != "signalk" or settings.signalk_host != "localhost":
         chain.append(
             SignalKSink(
                 "localhost",

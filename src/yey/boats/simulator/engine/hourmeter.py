@@ -11,11 +11,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
 
 
 class HourMeter:
-    def __init__(self, path: Optional[Path], flush_every_s: float = 60.0) -> None:
+    def __init__(self, path: Path | None, flush_every_s: float = 60.0) -> None:
         self._path = Path(path) if path is not None else None
         self._flush_every_s = flush_every_s
         self._total_s = self._load()

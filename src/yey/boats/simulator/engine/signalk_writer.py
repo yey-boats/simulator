@@ -2,9 +2,10 @@
 # signalk/sim/modules/signalk_writer.py
 from __future__ import annotations
 import asyncio
+import contextlib
 import json
 import math
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 import websockets  # type: ignore[import]
 from yey.boats.simulator.engine.navigator import NavState, engine_rpm, engine_fuel_L_h  # type: ignore[import]
@@ -94,19 +95,23 @@ _METADATA: dict[str, dict] = {
     },
     # ── Performance ── RB-POLAR-BEAR: polar-table performance computer ───
     "performance.velocityMadeGood": {
-        "description": "VMG toward/away from true wind (polar-derived)", "units": "m/s", "timeout": 3,
+        "description": "VMG toward/away from true wind (polar-derived)",
+        "units": "m/s", "timeout": 3,
         "source": {"manufacturer": _RB, "model": "RB-POLAR-BEAR"},
     },
     "performance.polarSpeed": {
-        "description": "Expected boat speed from polar at current TWA/TWS", "units": "m/s", "timeout": 3,
+        "description": "Expected boat speed from polar at current TWA/TWS",
+        "units": "m/s", "timeout": 3,
         "source": {"manufacturer": _RB, "model": "RB-POLAR-BEAR"},
     },
     "performance.polarSpeedRatio": {
-        "description": "Actual STW / polar speed (1.0 = on the polar)", "units": "ratio", "timeout": 3,
+        "description": "Actual STW / polar speed (1.0 = on the polar)",
+        "units": "ratio", "timeout": 3,
         "source": {"manufacturer": _RB, "model": "RB-POLAR-BEAR"},
     },
     "performance.targetAngle": {
-        "description": "VMG-optimal TWA for current TWS, current tack side", "units": "rad", "timeout": 3,
+        "description": "VMG-optimal TWA for current TWS, current tack side",
+        "units": "rad", "timeout": 3,
         "source": {"manufacturer": _RB, "model": "RB-POLAR-BEAR"},
     },
     "performance.beatAngle": {
@@ -118,7 +123,8 @@ _METADATA: dict[str, dict] = {
         "source": {"manufacturer": _RB, "model": "RB-POLAR-BEAR"},
     },
     "performance.targetSpeed": {
-        "description": "VMG-optimal boat speed at target TWA for current TWS", "units": "m/s", "timeout": 3,
+        "description": "VMG-optimal boat speed at target TWA for current TWS",
+        "units": "m/s", "timeout": 3,
         "source": {"manufacturer": _RB, "model": "RB-POLAR-BEAR"},
     },
     "performance.targetVmgToWaypoint": {
@@ -145,7 +151,8 @@ _METADATA: dict[str, dict] = {
     },
     # ── Meteo/swell ── RB-CLOUD-WHISPERER: Open-Meteo forecast, 1 h cache
     "environment.water.swell.height": {
-        "description": "Significant wave height (Open-Meteo forecast)", "units": "m", "timeout": 3600,
+        "description": "Significant wave height (Open-Meteo forecast)",
+        "units": "m", "timeout": 3600,
         "source": {"manufacturer": _RB, "model": "RB-CLOUD-WHISPERER"},
     },
     "environment.water.swell.period": {
@@ -153,7 +160,8 @@ _METADATA: dict[str, dict] = {
         "source": {"manufacturer": _RB, "model": "RB-CLOUD-WHISPERER"},
     },
     "environment.water.swell.direction": {
-        "description": "Swell direction, met convention (forecast)", "units": "rad", "timeout": 3600,
+        "description": "Swell direction, met convention (forecast)",
+        "units": "rad", "timeout": 3600,
         "source": {"manufacturer": _RB, "model": "RB-CLOUD-WHISPERER"},
     },
     "environment.outside.temperature": {
@@ -284,7 +292,8 @@ _METADATA: dict[str, dict] = {
         "source": {"manufacturer": _RB, "model": "RB-SWITCH-A-ROO"},
     },
     "electrical.switches.mastheadLight.state": {
-        "description": "Masthead steaming light, motor only (COLREGS Rule 23, 225° arc)", "timeout": 5,
+        "description": "Masthead steaming light, motor only (COLREGS Rule 23, 225° arc)",
+        "timeout": 5,
         "source": {"manufacturer": _RB, "model": "RB-SWITCH-A-ROO"},
     },
     "electrical.switches.steeringLight.state": {
@@ -351,7 +360,8 @@ _METADATA: dict[str, dict] = {
         "source": {"manufacturer": _RB, "model": "RB-VROOM-METER"},
     },
     "propulsion.main.revolutions": {
-        "description": "Engine shaft speed in Hz (RPM÷60). Cruise 2200 RPM ≈ 36.7 Hz, max 3000 RPM = 50 Hz",
+        "description": "Engine shaft speed in Hz (RPM÷60). "
+                      "Cruise 2200 RPM ≈ 36.7 Hz, max 3000 RPM = 50 Hz",
         "units": "Hz", "timeout": 3,
         "source": {"manufacturer": _RB, "model": "RB-VROOM-METER"},
     },
@@ -475,7 +485,8 @@ _METADATA: dict[str, dict] = {
         "source": {"manufacturer": _RB, "model": "RB-SKYHOOK-3000"},
     },
     "navigation.rateOfTurn": {
-        "description": "Rate of turn, + to starboard (from heading delta)", "units": "rad/s", "timeout": 5,
+        "description": "Rate of turn, + to starboard (from heading delta)",
+        "units": "rad/s", "timeout": 5,
         "source": {"manufacturer": _RB, "model": "RB-POINTY-END-200"},
     },
     # ── Autopilot ── RB-OTTO-PILOT: simulated autopilot ──────────────────────
@@ -826,9 +837,11 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
             _off = abs((great_circle_bearing(nav.lat, nav.lon, _nlat, _nlon)
                         - nav.twd_deg + 180.0) % 360.0 - 180.0)  # 0=dead upwind,180=dead down
             if _off < beat_deg:
-                _vmg_wp = polars.polar_speed(nav.tws_kts, beat_deg) * math.cos(math.radians(beat_deg - _off))
+                _vmg_wp = (polars.polar_speed(nav.tws_kts, beat_deg)
+                          * math.cos(math.radians(beat_deg - _off)))
             elif _off > gybe_deg:
-                _vmg_wp = polars.polar_speed(nav.tws_kts, gybe_deg) * math.cos(math.radians(_off - gybe_deg))
+                _vmg_wp = (polars.polar_speed(nav.tws_kts, gybe_deg)
+                          * math.cos(math.radians(_off - gybe_deg)))
             else:
                 _vmg_wp = polars.polar_speed(nav.tws_kts, _off)
             values.append(_v("performance.targetVmgToWaypoint", max(0.0, _vmg_wp) * 0.514444))
@@ -884,7 +897,7 @@ def _build_ais_delta(mmsi: str, lat: float, lon: float,
         "context": f"vessels.urn:mrn:imo:mmsi:{mmsi}",
         "updates": [{
             "$source": "ais_relay",
-            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "values": [
                 _v("navigation.position", {"latitude": lat, "longitude": lon}),
                 _v("navigation.courseOverGroundTrue", math.radians(cog_deg)),
@@ -995,10 +1008,9 @@ class SignalKWriter:
                                     gnss_antenna_altitude_m=gnss_antenna_altitude_m,
                                     gnss_position_jitter_deg=gnss_position_jitter_deg,
                                     rate_of_turn_rad_s=rate_of_turn_rad_s)
-        try:
+        # drop on full: sim_loop must never block on the queue
+        with contextlib.suppress(asyncio.QueueFull):
             self._queue.put_nowait(json.dumps(delta))
-        except asyncio.QueueFull:
-            pass  # drop on full: sim_loop must never block on the queue
 
     async def enqueue_ais(self, mmsi: str, lat: float, lon: float,
                            cog_deg: float, sog_kts: float,
@@ -1072,16 +1084,16 @@ class SignalKWriter:
         items = _metadata_items(extra_load_names)
         if not items:
             return
-        print(f"[writer] metadata trickle: {len(items)} records, 1 per {interval:g}s (delta)", flush=True)  # noqa: T201
+        print(f"[writer] metadata trickle: {len(items)} records, "  # noqa: T201
+             f"1 per {interval:g}s (delta)", flush=True)
         i = 0
         while True:
             path, meta = items[i % len(items)]
             i += 1
-            delta = _build_meta_delta(path, meta, datetime.now(timezone.utc))
-            try:
+            delta = _build_meta_delta(path, meta, datetime.now(UTC))
+            # never block; the value deltas take priority
+            with contextlib.suppress(asyncio.QueueFull):
                 self._queue.put_nowait(json.dumps(delta))
-            except asyncio.QueueFull:
-                pass  # never block; the value deltas take priority
             await asyncio.sleep(interval)
 
     async def put_route_resource(self, route_uuid: str, geojson: dict) -> None:

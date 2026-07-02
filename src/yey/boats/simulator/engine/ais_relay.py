@@ -110,7 +110,7 @@ class AISRelay:
                     return
                 print("[AIS] subscribed, first frame OK")
                 pending = [first_raw]
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 print("[AIS] subscribed (no initial server frame within 8 s)")
                 pending = []
 
@@ -128,7 +128,7 @@ class AISRelay:
                 else:
                     try:
                         raw = await asyncio.wait_for(ws.recv(), timeout=IDLE_RESUB_S)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         cur_lat, cur_lon = self._get_pos()
                         if haversine_nm(cur_lat, cur_lon, self._last_sub_lat,
                                         self._last_sub_lon) > RESUB_DIST_NM:
@@ -156,7 +156,8 @@ class AISRelay:
 
                 rx += 1
                 if rx == 1 or rx % 100 == 0:
-                    print(f"[AIS] {rx} targets relayed (latest: {vessel['name'] or vessel['mmsi']})")
+                    print(f"[AIS] {rx} targets relayed "
+                         f"(latest: {vessel['name'] or vessel['mmsi']})")
 
                 await self._writer.enqueue_ais(
                     vessel["mmsi"], vessel["lat"], vessel["lon"],

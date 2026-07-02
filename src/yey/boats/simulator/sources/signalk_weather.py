@@ -48,7 +48,8 @@ class SignalKDataSource:
         except Exception:
             return DEFAULT_WEATHER
         tws_ms = float(speed) if speed is not None else DEFAULT_WEATHER.tws_ms
-        twd_deg = math.degrees(float(direction)) % 360 if direction is not None else DEFAULT_WEATHER.twd_deg
+        twd_deg = (math.degrees(float(direction)) % 360
+                  if direction is not None else DEFAULT_WEATHER.twd_deg)
         temp_c = (float(temp_k) - 273.15) if temp_k is not None else DEFAULT_WEATHER.temp_c
         # gust_ms == tws_ms keeps sigma=0 in sample(), making it deterministic
         # (no forecast data from SignalK means no gust spread to model)

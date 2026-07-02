@@ -43,10 +43,9 @@ class SyntheticTraffic:
         brg = random.uniform(0, 360)
         dist = random.uniform(4.0, 9.0)
         lat, lon = _offset(olat, olon, brg, dist)
-        if converging:                      # steer roughly back toward own ship
-            cog = (brg + 180 + random.uniform(-25, 25)) % 360
-        else:
-            cog = random.uniform(0, 360)
+        # steer roughly back toward own ship when converging
+        cog = ((brg + 180 + random.uniform(-25, 25)) % 360
+              if converging else random.uniform(0, 360))
         return {"mmsi": spec["mmsi"], "name": spec["name"], "type": spec["type"],
                 "lat": lat, "lon": lon, "cog": cog,
                 "sog": spec["sog"] * random.uniform(0.8, 1.1)}

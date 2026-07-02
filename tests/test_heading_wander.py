@@ -6,7 +6,7 @@ few degrees around the target while the helm corrects continuously. These tests
 pin that behaviour so the firmware display shows a live HDG and a working rudder
 instead of frozen values.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 
 import pytest  # type: ignore[import]
 
@@ -129,7 +129,7 @@ async def test_holding_course_heading_wanders_and_rudder_works():
     eng = _engine()
     # Hold a fixed heading under autopilot ("auto" engaged).
     eng.submit_command("set_heading", 100.0)
-    now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=UTC)
 
     # Heading is turn-rate limited, so first let it slew from the start heading
     # onto the commanded course; then measure the steady-state wander.
@@ -174,7 +174,7 @@ async def test_route_following_leg_heading_wanders_and_rudder_works():
     # underway state so the boat is actively steering a leg (not still moored).
     eng.sched.state = SimState.MOTORED
     assert eng.autopilot.state.mode == "route", "fixture must follow the route"
-    now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=UTC)
 
     # Heading is turn-rate limited: settle onto the leg bearing first, then
     # measure the steady-state wander.
@@ -239,7 +239,7 @@ async def test_emitted_heading_wanders_and_rudder_nonzero_in_auto_hold():
     # Reproduce the live config: autopilot in AUTO holding 0.6513 rad (≈37.32°).
     target_rad = 0.6513
     eng.submit_command("set_heading", math.degrees(target_rad))
-    now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 6, 14, 10, 0, 0, tzinfo=UTC)
 
     # Heading is turn-rate limited: settle onto the AP target first, then measure
     # the steady-state wander on the wire.

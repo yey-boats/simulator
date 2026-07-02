@@ -11,7 +11,8 @@ POLAR = resources.polar_csv()
 
 
 def _nav():
-    return Navigator(Polars.load(POLAR), Schedule(), GeoGrid(fetcher=lambda pts: [-10.0 for _ in pts]))
+    grid = GeoGrid(fetcher=lambda pts: [-10.0 for _ in pts])
+    return Navigator(Polars.load(POLAR), Schedule(), grid)
 
 
 def _state(hdg=90.0):

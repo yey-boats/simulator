@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from yey.boats.simulator.engine.navigator import NavState  # type: ignore[import]
 from yey.boats.simulator.engine.snapshot import TelemetrySnapshot  # type: ignore[import]
@@ -11,7 +11,7 @@ def test_snapshot_holds_tick_state():
                    awa_deg=30, aws_kts=15, heel_deg=8, depth_m=20.0)
     snap = TelemetrySnapshot(
         nav=nav, elec=object(), sys=object(), lights=object(),
-        wx=object(), state=object(), utc_now=datetime.now(timezone.utc),
+        wx=object(), state=object(), utc_now=datetime.now(UTC),
         temps={}, next_wp=("Pula", 44.87, 13.84),
         route_href="/resources/routes/x", point_index=2,
         polars=None, autopilot=None,

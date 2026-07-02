@@ -9,12 +9,12 @@ Verifies:
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from yey.boats.simulator.engine.current import tidal_current  # type: ignore[import]
 
 # A fixed reference timestamp for determinism tests
-_T0 = datetime(2025, 6, 18, 12, 0, 0, tzinfo=timezone.utc)
+_T0 = datetime(2025, 6, 18, 12, 0, 0, tzinfo=UTC)
 
 # Sample 1440 evenly-spaced "ticks" over one compressed tidal cycle so we sweep
 # the full drift oscillation and catch the trough.
@@ -28,7 +28,7 @@ def _sweep():
     t0_ts = _T0.timestamp()
     for i in range(_SAMPLES):
         ts = t0_ts + i * (_PERIOD_S / _SAMPLES)
-        now = datetime.fromtimestamp(ts, tz=timezone.utc)
+        now = datetime.fromtimestamp(ts, tz=UTC)
         results.append(tidal_current(now))
     return results
 
@@ -45,7 +45,7 @@ def test_determinism_second_call_different_time():
     t1 = _T0
     # A quarter-period later (120 s) — deliberately NOT an integer multiple of
     # the 480 s period, so the phase genuinely differs.
-    t2 = datetime(2025, 6, 18, 12, 2, 0, tzinfo=timezone.utc)
+    t2 = datetime(2025, 6, 18, 12, 2, 0, tzinfo=UTC)
     a = tidal_current(t1)
     b = tidal_current(t2)
     # They should differ (the model actually varies over time)

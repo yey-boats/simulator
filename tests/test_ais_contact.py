@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 from yey.boats.simulator.engine.snapshot import AisContact, TelemetrySnapshot  # type: ignore[import]
+from datetime import UTC
 
 
 def test_ais_contact_fields():
@@ -10,9 +11,9 @@ def test_ais_contact_fields():
 
 
 def test_snapshot_ais_contacts_defaults_empty():
-    from datetime import datetime, timezone
+    from datetime import datetime
     snap = TelemetrySnapshot(
         nav=object(), elec=object(), sys=object(), lights=object(), wx=object(),
-        state=object(), utc_now=datetime.now(timezone.utc), temps={},
+        state=object(), utc_now=datetime.now(UTC), temps={},
         next_wp=None, route_href="", point_index=0)
     assert snap.ais_contacts == []  # noqa: S101

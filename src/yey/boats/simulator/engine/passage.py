@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import math
 import random
+from itertools import pairwise
 from typing import Any
 
 from yey.boats.simulator.engine.autoroute import AutorouteConfig, autoroute_leg
@@ -43,7 +44,7 @@ def _path_is_navigable(grid: Any, leg: list[tuple[float, float]],
                        cfg: AutorouteConfig) -> bool:
     """Every point along the polyline is at least `hard_min_m` deep."""
     cell = grid._cell
-    for a, b in zip(leg, leg[1:]):
+    for a, b in pairwise(leg):
         pts = _sample_line(a, b, cell)
         grid.sample(pts)                       # off-tick fetch (thread context)
         for lat, lon in pts:
