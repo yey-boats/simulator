@@ -51,10 +51,27 @@ By making a contribution to this project, I certify that:
 
 ## Development
 
+Preferred (reproducible — installs from the committed `uv.lock`):
+
+```
+uv sync --frozen --extra dev
+uv run pytest -q
+uv run ruff check src tests
+uv run mypy
+# frontend
+cd frontend && npm ci && npm run build
+```
+
+Without uv:
+
 ```
 pip install -e ".[dev]"
 pytest -q
 ruff check src tests
+mypy
 # frontend
 cd frontend && npm ci && npm run build
 ```
+
+If you add/change a dependency in `pyproject.toml`, regenerate the lockfile
+with `uv lock` and commit `uv.lock`.
