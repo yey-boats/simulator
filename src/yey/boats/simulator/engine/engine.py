@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from yey.boats.simulator.config import DEFAULT_RESUME_ROUTE_AFTER_S  # type: ignore[import]
 from yey.boats.simulator.engine.autopilot import Autopilot  # type: ignore[import]
 from yey.boats.simulator.engine.diagnostics import (  # type: ignore[import]
     Gnss, StarterBattery, oil_pressure_pa, rate_of_turn_rad_s)
@@ -46,7 +47,8 @@ class EngineCommandSink:
 
 class Engine:
     def __init__(self, route: Any, polars: Any, data_source: Any, ais_source: Any,
-                 start_state: Any, grid: Any, data_dir: Any = None) -> None:
+                 start_state: Any, grid: Any, data_dir: Any = None,
+                 resume_route_after_s: float = DEFAULT_RESUME_ROUTE_AFTER_S) -> None:
         self.route = route
         self.polars = polars
         self._data = data_source
@@ -56,7 +58,8 @@ class Engine:
         self._hourmeter = HourMeter(
             (Path(data_dir) / "engine_runtime.json") if data_dir is not None else None)
         self.sched = Schedule()
-        self.nav = Navigator(polars, self.sched, grid)
+        self.nav = Navigator(polars, self.sched, grid,
+                             resume_route_after_s=resume_route_after_s)
         self.elec = Electrical(initial_soc=0.85)
         self.sys_ = Systems()
         self.lights = LightsModel()
@@ -71,6 +74,9 @@ class Engine:
         self._cmd_queue: list[tuple[str, Any]] = []
         self._last_wx = DEFAULT_WEATHER
         self._last_twd = 0.0
+        # Sim clock: elapsed seconds, advanced 1.0 per tick (deterministic; drives
+        # the navigator's return-to-course timer, never the wall clock).
+        self.sim_s = 0.0
 
     def submit_command(self, action: str, arg: Any) -> None:
         """Queue a command. Fault-injection commands (set_fault/clear_fault)
@@ -97,9 +103,20 @@ class Engine:
         tws, twd = wx.sample()
         self._last_twd = twd
 
+        route_active = self._route_active()
         while self._cmd_queue:
             action, arg = self._cmd_queue.pop(0)
+            mode_before = self.autopilot.state.mode
             self.autopilot.apply(action, arg,
+                                 current_heading_deg=self.nav_state.hdg_deg, twd_deg=twd)
+            self.nav.route_resume.on_command(mode_before, self.autopilot.state.mode,
+                                             route_active, self.sim_s)
+        if self.nav.route_resume.due(self.autopilot.state.mode, route_active, self.sim_s):
+            print(f"[navigator] no autopilot command for "
+                  f"{self.nav.route_resume.delay_s:.0f}s after manual override "
+                  f"({self.autopilot.state.mode}) -> resuming route toward "
+                  f"{self.route.next_wp.name}", flush=True)
+            self.autopilot.apply("set_mode", "route",
                                  current_heading_deg=self.nav_state.hdg_deg, twd_deg=twd)
 
         if (self.autopilot.state.mode == "route"
@@ -222,4 +239,10 @@ class Engine:
             gnss_position_jitter_deg=gnss_state["position_jitter_deg"],
             rate_of_turn_rad_s=rot_rad_s)
         self.sched.tick(1.0)
+        self.sim_s += 1.0
         return snap
+
+    def _route_active(self) -> bool:
+        """A route the navigator can return to (at least one leg)."""
+        wps = getattr(self.route, "waypoints", None)
+        return wps is not None and len(wps) >= 2

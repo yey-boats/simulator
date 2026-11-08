@@ -31,6 +31,7 @@ pluggable output sinks.
 | `SINK` | `--sink` | `signalk` | `signalk` / `stdout` / `nmea0183`* / `nmea2000`* |
 | `SINK_FAILOVER` | `--no-failover` | on | Failover chain signalk->localhost->stdout |
 | `DATA_DIR` | `--data-dir` | `./run-data` | Writable dir for the depth cache |
+| `RESUME_ROUTE_AFTER_S` | `--resume-route-after-s` | `300` | Seconds after the last manual autopilot override before the navigator returns to the route (`0` = never) |
 
 \* NMEA sinks are registered but not yet implemented (Phase C).
 
@@ -38,6 +39,21 @@ pluggable output sinks.
 
 The engine builds a neutral telemetry frame each tick and hands it to the active
 sink. The default failover chain demotes SignalK -> SignalK@localhost -> stdout.
+
+## Autopilot control via SignalK
+
+The simulated autopilot listens on the SignalK stream for the private delta
+`steering.autopilot.command = {action, value, nonce}`. Dashboards and displays
+send standard SignalK autopilot PUTs instead. The
+[`signalk-plugin/`](signalk-plugin/README.md) directory holds the
+SIMULATOR-ONLY SignalK plugin `signalk-yey-sim-autopilot` (plugin id
+`yey-sim-autopilot`) that translates those PUTs into the command delta. Install
+it only on the demo SignalK server, never on a real boat.
+
+If a command takes the boat off its route (any mode other than `route`), the
+navigator returns to the route on its own once `RESUME_ROUTE_AFTER_S` seconds
+pass with no further command. It steers back toward the next waypoint, and
+`steering.autopilot.state` changes back to `route`.
 
 ## License
 

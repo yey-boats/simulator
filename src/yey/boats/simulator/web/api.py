@@ -27,6 +27,7 @@ def _config_public(settings) -> dict:
         "weather_source": settings.weather_source,
         "failover": settings.failover,
         "data_dir": str(settings.data_dir),
+        "resume_route_after_s": settings.resume_route_after_s,
     }
 
 
@@ -61,6 +62,17 @@ def _validate_config(payload: dict) -> tuple[dict, dict]:
             errors["weather_source"] = f"must be one of {_WEATHER}"
     if "failover" in payload:
         changes["failover"] = bool(payload["failover"])
+    if "resume_route_after_s" in payload:
+        raw = payload["resume_route_after_s"]
+        try:
+            if isinstance(raw, bool):
+                raise ValueError
+            secs = float(raw)
+            if not (0.0 <= secs < float("inf")):
+                raise ValueError
+            changes["resume_route_after_s"] = secs
+        except (TypeError, ValueError):
+            errors["resume_route_after_s"] = "must be a number of seconds >= 0 (0 = never)"
     for k in _SECRET_FIELDS:        # empty string => leave unchanged (skip)
         if k in payload and str(payload[k]) != "":
             changes[k] = str(payload[k])

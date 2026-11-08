@@ -9,6 +9,7 @@ export type Config = {
   weather_source: string;
   failover: boolean;
   data_dir: string;
+  resume_route_after_s: number;
 };
 
 export type Waypoint = { name: string; lat: number; lon: number };

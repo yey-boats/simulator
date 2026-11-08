@@ -19,6 +19,11 @@ _DEFAULT_DATA_DIR = Path(os.environ.get("DATA_DIR", "./run-data")).resolve()
 DEFAULT_BOAT_DRAFT_M = 2.2
 DEFAULT_TRANSDUCER_DEPTH_M = 0.6
 
+# Navigator return-to-course rule: after a manual autopilot command takes the
+# boat out of route mode, resume route-following once this many seconds pass
+# with no further command. 0 = never resume (manual override sticks).
+DEFAULT_RESUME_ROUTE_AFTER_S = 300.0
+
 
 @dataclass
 class Settings:
@@ -34,10 +39,14 @@ class Settings:
     # Boat geometry (depth derivations + routing draft floor)
     boat_draft_m: float = DEFAULT_BOAT_DRAFT_M
     transducer_depth_m: float = DEFAULT_TRANSDUCER_DEPTH_M
+    # Seconds after the last manual autopilot override before the navigator
+    # re-engages route mode (0 = never). See engine/navigator.py RouteResume.
+    resume_route_after_s: float = DEFAULT_RESUME_ROUTE_AFTER_S
 
     _PERSIST_KEYS = ("signalk_host", "signalk_port", "signalk_username",
                      "signalk_password", "aisstream_api_key", "sink",
-                     "weather_source", "failover", "data_dir")
+                     "weather_source", "failover", "data_dir",
+                     "resume_route_after_s")
 
     def to_dict(self) -> dict:
         d = {k: getattr(self, k) for k in self._PERSIST_KEYS}
@@ -91,6 +100,9 @@ class Settings:
                          if "SINK_FAILOVER" in os.environ else None),
             "data_dir": (Path(os.environ["DATA_DIR"]).resolve()
                         if "DATA_DIR" in os.environ else None),
+            "resume_route_after_s": (max(0.0, float(os.environ["RESUME_ROUTE_AFTER_S"]))
+                                     if os.environ.get("RESUME_ROUTE_AFTER_S", "").strip()
+                                     else None),
         }
         for k, v in env_map.items():
             if v is not None:
