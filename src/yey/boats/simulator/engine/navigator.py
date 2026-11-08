@@ -106,11 +106,62 @@ class NavState:
     log_nm: float = 0.0
 
 
+class RouteResume:
+    """Navigator rule: return to the course after a manual autopilot override.
+
+    Autopilot commands reach the sim from SignalK (the demo dashboard / ESP32
+    display PUTs, translated by the `signalk-yey-sim-autopilot` plugin into the
+    `steering.autopilot.command` delta). When such a command takes the autopilot
+    OUT of route mode while a route is active, the navigator notes the time;
+    every further command restarts that timer. Once `delay_s` passes with no
+    new command, `due()` reports True and the engine re-engages route mode, so
+    the normal route-following steers the boat back toward the next waypoint
+    (turn-rate limited — it rejoins, it does not jump).
+
+    Pure and clock-agnostic: callers pass the sim's own elapsed seconds, so the
+    behaviour is deterministic and testable. `delay_s <= 0` disables the rule.
+    """
+
+    def __init__(self, delay_s: float = 300.0) -> None:
+        self.delay_s = float(delay_s)
+        self._since_s: float | None = None   # time of the last overriding command
+
+    @property
+    def armed(self) -> bool:
+        return self._since_s is not None
+
+    def on_command(self, mode_before: str, mode_after: str,
+                   route_active: bool, now_s: float) -> None:
+        """Record one applied autopilot command (mode before/after applying it)."""
+        if self.delay_s <= 0 or mode_after == "route":
+            # Disabled, or the operator put it back on the route themselves.
+            self._since_s = None
+        elif self._since_s is not None:
+            self._since_s = now_s                  # further command: restart timer
+        elif mode_before == "route" and route_active:
+            self._since_s = now_s                  # override starts now
+
+    def due(self, mode_now: str, route_active: bool, now_s: float) -> bool:
+        """True once (and disarms) when it is time to resume the route."""
+        if self._since_s is None:
+            return False
+        if self.delay_s <= 0 or mode_now == "route" or not route_active:
+            self._since_s = None
+            return False
+        if now_s - self._since_s >= self.delay_s:
+            self._since_s = None
+            return True
+        return False
+
+
 class Navigator:
-    def __init__(self, polars: Polars, schedule: Schedule, grid) -> None:
+    def __init__(self, polars: Polars, schedule: Schedule, grid,
+                 resume_route_after_s: float = 300.0) -> None:
         self._polars   = polars
         self._schedule = schedule
         self._grid     = grid           # object exposing depth_at(lat,lon) -> D (m)
+        # Return-to-course after a manual override (see RouteResume).
+        self.route_resume = RouteResume(resume_route_after_s)
 
     def route_heading(self, state: NavState, wp_bearing: float,
                       tws_kts: float, twd_deg: float,

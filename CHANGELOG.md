@@ -1,6 +1,20 @@
 # Changelog
 
 ## 0.1.0 — unreleased
+- `signalk-plugin/`: new SIMULATOR-ONLY SignalK server plugin
+  `signalk-yey-sim-autopilot` (plugin id `yey-sim-autopilot`). It registers PUT
+  handlers for `steering.autopilot.state`, `.actions.adjustHeading` (degrees),
+  `.target.headingTrue` (radians), `.actions.tack` and `.actions.advanceMode`,
+  and re-emits each one as the sim's `steering.autopilot.command` delta. It
+  replaces the autopilot bridge that used to live in Instruments-manager.
+  Tested with `node --test` against a fake `app`.
+- Navigator return-to-course rule (`engine/navigator.py` `RouteResume`): when an
+  autopilot command takes the boat out of route mode while a route is active,
+  route mode is re-engaged once `resume_route_after_s` seconds (default 300,
+  `0` = never) pass with no further command. The timer runs on the engine's sim
+  clock. The setting can come from the `RESUME_ROUTE_AFTER_S` env var, the
+  `--resume-route-after-s` flag, `config.json` and the web admin
+  `/api/config`.
 - `engine/current.py`: deterministic `tidal_current(now) -> (set_deg, drift_kts)`
   model — Adriatic NW→SE drift (150° ± 30°), drift half-wave-rectified so it
   reaches exactly 0 kn at the trough and peaks at 0.8 kn. Cycle is

@@ -22,6 +22,10 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="where weather comes from (default: env WEATHER_SOURCE or openmeteo)")
     p.add_argument("--data-dir", default=None, help="writable dir for the depth cache")
     p.add_argument("--no-failover", action="store_true", help="disable sink failover chain")
+    p.add_argument("--resume-route-after-s", type=float, default=None,
+                   help="seconds after the last manual autopilot override before the "
+                        "navigator resumes the route (0 = never; default: env "
+                        "RESUME_ROUTE_AFTER_S or 300)")
     # web admin flags
     p.add_argument("--web-host", default=None)
     p.add_argument("--web-port", type=int, default=None)
@@ -43,6 +47,8 @@ def build_settings(argv: list[str] | None = None) -> Settings:
         "signalk_username": args.signalk_username,
         "signalk_password": args.signalk_password,
         "weather_source": args.weather_source,
+        "resume_route_after_s": (max(0.0, args.resume_route_after_s)
+                                 if args.resume_route_after_s is not None else None),
     }
     if args.data_dir is not None:
         overrides["data_dir"] = Path(args.data_dir).resolve()

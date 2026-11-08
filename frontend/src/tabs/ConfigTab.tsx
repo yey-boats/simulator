@@ -208,6 +208,7 @@ export default function ConfigTab() {
   const [weather, setWeather] = useState("");
   const [failover, setFailover] = useState(false);
   const [dataDir, setDataDir] = useState("");
+  const [resumeAfter, setResumeAfter] = useState("");
 
   // Field errors from 400 response
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -227,6 +228,7 @@ export default function ConfigTab() {
           setWeather(c.weather_source);
           setFailover(c.failover);
           setDataDir(c.data_dir);
+          setResumeAfter(String(c.resume_route_after_s));
           loaded.current = true;
         }
       })
@@ -248,6 +250,9 @@ export default function ConfigTab() {
       if (weather !== config?.weather_source) payload.weather_source = weather;
       if (failover !== config?.failover) payload.failover = failover;
       if (dataDir !== config?.data_dir) payload.data_dir = dataDir;
+      const resumeNum = parseFloat(resumeAfter);
+      if (!isNaN(resumeNum) && resumeNum !== config?.resume_route_after_s)
+        payload.resume_route_after_s = resumeNum;
       // secrets — only include if user typed something
       if (password) payload.signalk_password = password;
       if (aiskeyVal) payload.aisstream_api_key = aiskeyVal;
@@ -459,6 +464,19 @@ export default function ConfigTab() {
             onChange={(e) => setDataDir(e.target.value)}
             placeholder="/path/to/data"
             style={{ width: "100%" }}
+          />
+        </FieldRow>
+        <FieldRow
+          label="RESUME ROUTE AFTER (S)"
+          error={fieldErrors.resume_route_after_s}
+        >
+          <input
+            type="number"
+            min={0}
+            value={resumeAfter}
+            onChange={(e) => setResumeAfter(e.target.value)}
+            placeholder="300 (0 = never)"
+            style={{ width: 120 }}
           />
         </FieldRow>
       </Section>

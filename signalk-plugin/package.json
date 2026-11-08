@@ -1,0 +1,27 @@
+{
+  "name": "signalk-yey-sim-autopilot",
+  "version": "0.1.0",
+  "description": "SIMULATOR-ONLY SignalK plugin: translates standard SignalK autopilot PUTs into the yey.boats simulator's steering.autopilot.command delta. Never install on a real boat.",
+  "main": "index.js",
+  "keywords": [
+    "signalk-node-server-plugin",
+    "signalk-category-utility"
+  ],
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "author": "Boris Sorochkin",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yey-boats/simulator.git",
+    "directory": "signalk-plugin"
+  },
+  "files": [
+    "index.js",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
