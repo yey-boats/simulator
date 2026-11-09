@@ -1,6 +1,20 @@
 # Changelog
 
 ## 0.1.0 — unreleased
+- Demo-boat equipment (`engine/signalk_writer.py`): six more fictional Rusty
+  Boats devices, each with `/meta` source + description and live values so they
+  show up in the navigator's `list_instruments`:
+  RB-NORTH-ISH-9 magnetic compass (`navigation.headingMagnetic`,
+  `.headingCompass`, `.magneticDeviation`, `.magneticVariation`; Adriatic WMM
+  fit + swing-table deviation, exactly consistent with `headingTrue`),
+  RB-SHOUTY-BOX-B Class B AIS transponder (`sensors.ais.*`: class, transmitting,
+  navigational status, SOTDMA report interval, targets heard, antenna offsets),
+  RB-CHATTY-CATHY-25 VHF/DSC (`communication.vhf.*`, `communication.dsc.*`),
+  RB-BLIP-O-MATIC-4G radar (`sensors.radar.state|range|targetsTracked`,
+  auto-range from AIS traffic), RB-CHILLY-WILLY fridge/freezer temperatures and
+  RB-UMBILICAL-16 shore-power inlet (`electrical.shorePower.*`, unplugged: the
+  sim anchors). `steering.autopilot.target.headingMagnetic` now applies the
+  variation (was equal to true).
 - `signalk-plugin/`: new SIMULATOR-ONLY SignalK server plugin
   `signalk-yey-sim-autopilot` (plugin id `yey-sim-autopilot`). It registers PUT
   handlers for `steering.autopilot.state`, `.actions.adjustHeading` (degrees),
