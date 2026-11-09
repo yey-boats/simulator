@@ -495,7 +495,7 @@ _METADATA: dict[str, dict] = {
         "source": {"manufacturer": _RB, "model": "RB-OTTO-PILOT"},
     },
     "steering.autopilot.target.headingMagnetic": {
-        "description": "Autopilot target heading", "units": "rad", "timeout": 5,
+        "description": "Autopilot target heading (magnetic)", "units": "rad", "timeout": 5,
         "source": {"manufacturer": _RB, "model": "RB-OTTO-PILOT"},
     },
     "steering.autopilot.target.windAngleApparent": {
@@ -505,6 +505,123 @@ _METADATA: dict[str, dict] = {
     "steering.rudderAngle": {
         "description": "Rudder angle, + to starboard", "units": "rad", "timeout": 5,
         "source": {"manufacturer": _RB, "model": "RB-OTTO-PILOT"},
+    },
+    # ── Magnetic compass ── RB-NORTH-ISH-9: electronic binnacle compass ──────
+    "navigation.headingMagnetic": {
+        "description": "Magnetic heading (compass heading corrected for deviation)",
+        "units": "rad", "timeout": 3,
+        "source": {"manufacturer": _RB, "model": "RB-NORTH-ISH-9"},
+    },
+    "navigation.headingCompass": {
+        "description": "Raw compass heading, before deviation correction",
+        "units": "rad", "timeout": 3,
+        "source": {"manufacturer": _RB, "model": "RB-NORTH-ISH-9"},
+    },
+    "navigation.magneticDeviation": {
+        "description": "Compass deviation at the current heading (from the swing table), +E",
+        "units": "rad", "timeout": 3,
+        "source": {"manufacturer": _RB, "model": "RB-NORTH-ISH-9"},
+    },
+    "navigation.magneticVariation": {
+        "description": "Magnetic variation at the current position, +E (true = magnetic + var)",
+        "units": "rad", "timeout": 10,
+        "source": {"manufacturer": _RB, "model": "RB-NORTH-ISH-9"},
+    },
+    # ── AIS ── RB-SHOUTY-BOX-B: Class B SOTDMA AIS transponder (own ship) ────
+    "sensors.ais.class": {
+        "description": "Own-ship AIS transponder class (A/B)", "timeout": 60,
+        "source": {"manufacturer": _RB, "model": "RB-SHOUTY-BOX-B"},
+    },
+    "sensors.ais.transmitting": {
+        "description": "AIS transponder transmitting own-ship reports (false = silent mode)",
+        "timeout": 60,
+        "source": {"manufacturer": _RB, "model": "RB-SHOUTY-BOX-B"},
+    },
+    "sensors.ais.navigationalStatus": {
+        "description": "AIS navigational status broadcast for own ship", "timeout": 60,
+        "source": {"manufacturer": _RB, "model": "RB-SHOUTY-BOX-B"},
+    },
+    "sensors.ais.reportingInterval": {
+        "description": "Own-ship AIS position report interval (SOTDMA, speed-dependent)",
+        "units": "s", "timeout": 60,
+        "source": {"manufacturer": _RB, "model": "RB-SHOUTY-BOX-B"},
+    },
+    "sensors.ais.targetsTracked": {
+        "description": "AIS targets received within 25 nM", "units": "count", "timeout": 60,
+        "source": {"manufacturer": _RB, "model": "RB-SHOUTY-BOX-B"},
+    },
+    "sensors.ais.fromBow": {
+        "description": "AIS GNSS antenna distance from the bow (static data)",
+        "units": "m", "timeout": 600,
+        "source": {"manufacturer": _RB, "model": "RB-SHOUTY-BOX-B"},
+    },
+    "sensors.ais.fromCenter": {
+        "description": "AIS GNSS antenna offset from the centreline, +stbd (static data)",
+        "units": "m", "timeout": 600,
+        "source": {"manufacturer": _RB, "model": "RB-SHOUTY-BOX-B"},
+    },
+    # ── VHF / DSC ── RB-CHATTY-CATHY-25: fixed-mount 25 W VHF, Class D DSC ───
+    "communication.vhf.channel": {
+        "description": "VHF radio selected channel", "timeout": 30,
+        "source": {"manufacturer": _RB, "model": "RB-CHATTY-CATHY-25"},
+    },
+    "communication.vhf.dualWatch": {
+        "description": "VHF dual watch on (selected channel + Ch 16)", "timeout": 30,
+        "source": {"manufacturer": _RB, "model": "RB-CHATTY-CATHY-25"},
+    },
+    "communication.vhf.transmitPower": {
+        "description": "VHF transmit power setting: high (25 W) / low (1 W)", "timeout": 30,
+        "source": {"manufacturer": _RB, "model": "RB-CHATTY-CATHY-25"},
+    },
+    "communication.vhf.transmitting": {
+        "description": "VHF currently transmitting (PTT keyed)", "timeout": 30,
+        "source": {"manufacturer": _RB, "model": "RB-CHATTY-CATHY-25"},
+    },
+    "communication.dsc.mmsi": {
+        "description": "MMSI programmed into the DSC radio", "timeout": 600,
+        "source": {"manufacturer": _RB, "model": "RB-CHATTY-CATHY-25"},
+    },
+    "communication.dsc.positionAvailable": {
+        "description": "DSC radio has a valid GNSS position to send with a distress call",
+        "timeout": 30,
+        "source": {"manufacturer": _RB, "model": "RB-CHATTY-CATHY-25"},
+    },
+    # ── Radar ── RB-BLIP-O-MATIC-4G: 18-inch solid-state broadband radome ────
+    "sensors.radar.state": {
+        "description": "Radar state: transmit / standby", "timeout": 30,
+        "source": {"manufacturer": _RB, "model": "RB-BLIP-O-MATIC-4G"},
+    },
+    "sensors.radar.range": {
+        "description": "Radar display range (auto-range)", "units": "m", "timeout": 30,
+        "source": {"manufacturer": _RB, "model": "RB-BLIP-O-MATIC-4G"},
+    },
+    "sensors.radar.targetsTracked": {
+        "description": "Radar (MARPA) targets tracked within the current range",
+        "units": "count", "timeout": 30,
+        "source": {"manufacturer": _RB, "model": "RB-BLIP-O-MATIC-4G"},
+    },
+    # ── Refrigeration ── RB-CHILLY-WILLY: fridge/freezer temperature monitor ─
+    "environment.inside.refrigerator.temperature": {
+        "description": "Fridge compartment temperature", "units": "K", "timeout": 30,
+        "source": {"manufacturer": _RB, "model": "RB-CHILLY-WILLY"},
+    },
+    "environment.inside.freezer.temperature": {
+        "description": "Freezer compartment temperature", "units": "K", "timeout": 30,
+        "source": {"manufacturer": _RB, "model": "RB-CHILLY-WILLY"},
+    },
+    # ── Shore power ── RB-UMBILICAL-16: 16 A shore-power inlet monitor ───────
+    "electrical.shorePower.connected": {
+        "description": "Shore power cable connected and live", "timeout": 30,
+        "source": {"manufacturer": _RB, "model": "RB-UMBILICAL-16"},
+    },
+    "electrical.shorePower.voltage": {
+        "description": "Shore power inlet AC voltage (0 when unplugged)",
+        "units": "V", "timeout": 30,
+        "source": {"manufacturer": _RB, "model": "RB-UMBILICAL-16"},
+    },
+    "electrical.shorePower.current": {
+        "description": "Shore power inlet AC current", "units": "A", "timeout": 30,
+        "source": {"manufacturer": _RB, "model": "RB-UMBILICAL-16"},
     },
 }
 
@@ -595,8 +712,11 @@ def _course_values(lat: float, lon: float,
     return out
 
 
-def _autopilot_values(ap: Any, hdg_deg: float) -> list[dict]:
-    """SignalK delta values for the autopilot from its current state."""
+def _autopilot_values(ap: Any, hdg_deg: float, variation_deg: float = 0.0) -> list[dict]:
+    """SignalK delta values for the autopilot from its current state.
+
+    The autopilot steers in TRUE degrees internally; ``variation_deg`` (+E)
+    converts the published magnetic target (magnetic = true - variation)."""
     s = ap.state
     state_label = s.mode if s.engaged else "standby"
     out = [
@@ -608,9 +728,153 @@ def _autopilot_values(ap: Any, hdg_deg: float) -> list[dict]:
                       math.radians(s.target_wind_angle_deg)))
     target_hdg = s.target_heading_deg if s.target_heading_deg is not None else hdg_deg
     target_rad = math.radians(target_hdg)
-    out.append(_v("steering.autopilot.target.headingMagnetic", target_rad))
-    # No magnetic variation model — true heading == magnetic heading in this sim.
+    out.append(_v("steering.autopilot.target.headingMagnetic",
+                  math.radians((target_hdg - variation_deg) % 360.0)))
     out.append(_v("steering.autopilot.target.headingTrue", target_rad))
+    return out
+
+
+# ── Equipment models (compass / AIS / VHF / radar / fridge / shore power) ──
+# Pure functions of the sim's own state so every value stays consistent with
+# the published position, heading, speed and voyage state.
+
+# Standard radar display ranges (nM) the auto-range picks from.
+_RADAR_RANGES_NM = (0.75, 1.5, 3.0, 6.0, 12.0)
+_AIS_RX_RANGE_NM = 25.0       # typical Class B receive range on a masthead antenna
+_AIS_ANTENNA_FROM_BOW_M = 12.6  # stern-arch GNSS antenna on a 13.7 m (45 ft) hull
+_AIS_ANTENNA_FROM_CENTER_M = 0.4
+
+
+def _magnetic_variation_deg(lat: float, lon: float) -> float:
+    """Approximate magnetic variation (+E, degrees) for the Adriatic/Ionian.
+
+    A planar fit to WMM-2025 declination at Venice (~4.0 E), Split (~5.0 E)
+    and Corfu (~4.6 E). Good to a few tenths of a degree in the sim's cruising
+    area; clamped so a far-off start position can't produce nonsense."""
+    var = 4.0 + 0.5 * (lon - 12.3) + 0.55 * (lat - 45.4)
+    return max(-15.0, min(15.0, var))
+
+
+def _compass_deviation_deg(compass_deg: float) -> float:
+    """Residual deviation (+E, degrees) from the compass swing table: a classic
+    A + B·sin + C·cos curve, within ±2.5 degrees like a well-swung installation."""
+    h = math.radians(compass_deg)
+    return 0.4 + 1.6 * math.sin(h) - 1.0 * math.cos(h)
+
+
+def _compass_values(hdg_true_deg: float, variation_deg: float) -> list[dict]:
+    """headingMagnetic / headingCompass / deviation / variation, exactly
+    consistent with headingTrue: true = magnetic + variation and
+    magnetic = compass + deviation (SignalK conventions, +E)."""
+    mag = (hdg_true_deg - variation_deg) % 360.0
+    compass = mag
+    for _ in range(3):  # deviation is tabulated against COMPASS heading
+        compass = (mag - _compass_deviation_deg(compass)) % 360.0
+    deviation = ((mag - compass + 180.0) % 360.0) - 180.0
+    return [
+        _v("navigation.headingMagnetic",   math.radians(mag)),
+        _v("navigation.headingCompass",    math.radians(compass)),
+        _v("navigation.magneticDeviation", math.radians(deviation)),
+        _v("navigation.magneticVariation", math.radians(variation_deg)),
+    ]
+
+
+def _ais_nav_status(state: SimState) -> str:
+    if state == SimState.SAILING:
+        return "under way sailing"
+    if state == SimState.MOTORED:
+        return "under way using engine"
+    return "at anchor"  # MOORED / BORA_HOLD: the sim lies at anchor (anchor light on)
+
+
+def _ais_report_interval_s(sog_kts: float, state: SimState) -> float:
+    """Class B SOTDMA reporting rate (ITU-R M.1371): 3 min when slow/at anchor,
+    30 s at 2-14 kn, 15 s at 14-23 kn, 5 s above."""
+    if state in (SimState.MOORED, SimState.BORA_HOLD) or sog_kts < 2.0:
+        return 180.0
+    if sog_kts < 14.0:
+        return 30.0
+    if sog_kts < 23.0:
+        return 15.0
+    return 5.0
+
+
+def _radar_auto_range_nm(nearest_nm: float | None) -> float:
+    """Auto-range: smallest standard range showing the nearest target with a
+    25 % margin; 3 nM with no traffic around."""
+    if nearest_nm is None:
+        return 3.0
+    for r in _RADAR_RANGES_NM:
+        if nearest_nm * 1.25 <= r:
+            return r
+    return _RADAR_RANGES_NM[-1]
+
+
+def _equipment_values(nav: NavState, elec: ElecState, state: SimState,
+                      utc_now: datetime, variation_deg: float,
+                      ais_target_ranges_m: list[float] | None,
+                      gnss_quality: str | None) -> list[dict]:
+    underway = state in (SimState.SAILING, SimState.MOTORED)
+    ranges_nm = sorted(d / 1852.0 for d in (ais_target_ranges_m or []))
+    nearest_nm = ranges_nm[0] if ranges_nm else None
+    out = _compass_values(nav.hdg_deg, variation_deg)
+
+    # AIS transponder: own-ship status + what it's hearing.
+    out += [
+        _v("sensors.ais.class",              "B"),
+        _v("sensors.ais.transmitting",       True),
+        _v("sensors.ais.navigationalStatus", _ais_nav_status(state)),
+        _v("sensors.ais.reportingInterval",  _ais_report_interval_s(nav.sog_kts, state)),
+        _v("sensors.ais.targetsTracked",
+           sum(1 for r in ranges_nm if r <= _AIS_RX_RANGE_NM)),
+        _v("sensors.ais.fromBow",            _AIS_ANTENNA_FROM_BOW_M),
+        _v("sensors.ais.fromCenter",         _AIS_ANTENNA_FROM_CENTER_M),
+    ]
+
+    # VHF/DSC: watching 16, low power at anchor. PTT follows the electrical
+    # model's VHF load (25 W while transmitting, 5 W receive).
+    out += [
+        _v("communication.vhf.channel",          16),
+        _v("communication.vhf.dualWatch",        underway),
+        _v("communication.vhf.transmitPower",    "high" if underway else "low"),
+        _v("communication.vhf.transmitting",     elec.loads.get("vhf", 0.0) > 5.0),
+        _v("communication.dsc.mmsi",             SELF_MMSI),
+        _v("communication.dsc.positionAvailable", gnss_quality != "no GNSS"),
+    ]
+
+    # Radar: transmitting while under way, standby at anchor.
+    if underway:
+        rng_nm = _radar_auto_range_nm(nearest_nm)
+        radar_targets = min(10, sum(1 for r in ranges_nm if r <= rng_nm))  # 10-target MARPA
+        out += [
+            _v("sensors.radar.state",          "transmit"),
+            _v("sensors.radar.range",          rng_nm * 1852.0),
+            _v("sensors.radar.targetsTracked", radar_targets),
+        ]
+    else:
+        out += [
+            _v("sensors.radar.state",          "standby"),
+            _v("sensors.radar.range",          3.0 * 1852.0),
+            _v("sensors.radar.targetsTracked", 0),
+        ]
+
+    # Fridge/freezer: thermostat sawtooth over the compressor's 2-min half-cycle
+    # (pulls down while the fridge load is drawing, warms while it rests).
+    phase = (utc_now.timestamp() % 120.0) / 120.0
+    compressor_on = elec.loads.get("fridge", 0.0) > 0.0
+    fridge_c = 5.5 - 1.5 * phase if compressor_on else 4.0 + 1.5 * phase
+    freezer_c = -18.0 - 1.0 * phase if compressor_on else -19.0 + 1.0 * phase
+    out += [
+        _v("environment.inside.refrigerator.temperature", fridge_c + 273.15),
+        _v("environment.inside.freezer.temperature",      freezer_c + 273.15),
+    ]
+
+    # Shore power: the sim never docks in a marina (it anchors), so unplugged.
+    out += [
+        _v("electrical.shorePower.connected", False),
+        _v("electrical.shorePower.voltage",   0.0),
+        _v("electrical.shorePower.current",   0.0),
+    ]
     return out
 
 
@@ -634,7 +898,8 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
                          gnss_quality: str | None = None,
                          gnss_antenna_altitude_m: float | None = None,
                          gnss_position_jitter_deg: tuple[float, float] | None = None,
-                         rate_of_turn_rad_s: float | None = None) -> dict:
+                         rate_of_turn_rad_s: float | None = None,
+                         ais_target_ranges_m: list[float] | None = None) -> dict:
     ts = _ts(utc_now)
     engine_on = state == SimState.MOTORED
     genset_on = elec.genset_state == "running"
@@ -852,8 +1117,13 @@ def _build_vessel_delta(nav: NavState, elec: ElecState, sys_: SystemsState,
             values.append(_v("performance.polarSpeedRatio",
                              nav.stw_kts / polar_speed_kts))
 
+    variation_deg = _magnetic_variation_deg(nav.lat, nav.lon)
     if autopilot is not None:
-        values.extend(_autopilot_values(autopilot, nav.hdg_deg))
+        values.extend(_autopilot_values(autopilot, nav.hdg_deg, variation_deg))
+
+    # Compass, AIS transponder, VHF/DSC, radar, fridge/freezer, shore power.
+    values.extend(_equipment_values(nav, elec, state, utc_now, variation_deg,
+                                    ais_target_ranges_m, gnss_quality))
 
     # navigation.closestApproach.* — sim convention (no SK standard).
     # Bearing (radians, true) and distance (metres) to the nearest AIS contact.
@@ -996,7 +1266,8 @@ class SignalKWriter:
                                  gnss_quality: str | None = None,
                                  gnss_antenna_altitude_m: float | None = None,
                                  gnss_position_jitter_deg: tuple[float, float] | None = None,
-                                 rate_of_turn_rad_s: float | None = None) -> None:
+                                 rate_of_turn_rad_s: float | None = None,
+                                 ais_target_ranges_m: list[float] | None = None) -> None:
         delta = _build_vessel_delta(nav, elec, sys_, lights, wx, state, utc_now, temps,
                                     next_wp, route_href, point_index, polars, autopilot,
                                     closest_approach, current, prev_wp, engine_run_s,
@@ -1010,7 +1281,8 @@ class SignalKWriter:
                                     gnss_quality=gnss_quality,
                                     gnss_antenna_altitude_m=gnss_antenna_altitude_m,
                                     gnss_position_jitter_deg=gnss_position_jitter_deg,
-                                    rate_of_turn_rad_s=rate_of_turn_rad_s)
+                                    rate_of_turn_rad_s=rate_of_turn_rad_s,
+                                    ais_target_ranges_m=ais_target_ranges_m)
         # drop on full: sim_loop must never block on the queue
         with contextlib.suppress(asyncio.QueueFull):
             self._queue.put_nowait(json.dumps(delta))

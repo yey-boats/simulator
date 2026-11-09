@@ -36,8 +36,11 @@ class SignalKSink:
     async def publish(self, snapshot: TelemetrySnapshot) -> None:
         # Compute nearest AIS contact bearing/distance for closestApproach paths.
         closest_approach: tuple[float, float] | None = None
+        nav = snapshot.nav
+        # Range (m) to every AIS contact: feeds the AIS/radar target counts.
+        ais_ranges_m = [haversine_nm(nav.lat, nav.lon, c.lat, c.lon) * 1852
+                        for c in snapshot.ais_contacts]
         if snapshot.ais_contacts:
-            nav = snapshot.nav
             nearest = min(
                 snapshot.ais_contacts,
                 key=lambda c: haversine_nm(nav.lat, nav.lon, c.lat, c.lon),
@@ -73,7 +76,8 @@ class SignalKSink:
             gnss_quality=snapshot.gnss_quality,
             gnss_antenna_altitude_m=snapshot.gnss_antenna_altitude_m,
             gnss_position_jitter_deg=snapshot.gnss_position_jitter_deg,
-            rate_of_turn_rad_s=snapshot.rate_of_turn_rad_s)
+            rate_of_turn_rad_s=snapshot.rate_of_turn_rad_s,
+            ais_target_ranges_m=ais_ranges_m)
         for c in snapshot.ais_contacts:
             await self.writer.enqueue_ais(c.mmsi, c.lat, c.lon, c.cog_deg,
                                           c.sog_kts, c.name, c.ship_type)
