@@ -10,6 +10,7 @@
 //   PUT steering.autopilot.target.headingTrue    = <radians>
 //   PUT steering.autopilot.actions.tack          = "port" | "starboard" | true
 //   PUT steering.autopilot.actions.advanceMode   = <anything>
+//   PUT steering.autopilot.actions.advanceWaypoint = 1   (route mode only)
 // The yey.boats Python simulator's autopilot instead listens on the SignalK
 // stream for a private `steering.autopilot.command` delta
 // {action, value, nonce} (see src/yey/boats/simulator/engine/command_listener.py).
@@ -19,10 +20,22 @@
 //
 // It is ONLY for the simulator's SignalK server. On a real boat these PUTs
 // belong to the boat's real autopilot plugin; installing this there would
-// answer PUTs as COMPLETED while steering nothing.
+// answer PUTs as COMPLETED while steering nothing. So (#14) it registers its
+// PUT handlers only once it sees the simulator on this server: the simulator
+// writes every delta with `$source: "simulator.py"` (the same label its own
+// command listener filters on). Until then, or on a real boat, it handles
+// nothing and its plugin status says so. The `simulation: true` option skips
+// detection for a sim setup that relabels its source. Every answer carries
+// `simulated: true` and a "SIMULATED" message.
 
 const PLUGIN_ID = 'yey-sim-autopilot'
 const COMMAND_PATH = 'steering.autopilot.command'
+// The $source the simulator stamps on its deltas (src/yey/boats/simulator/
+// engine/signalk_writer.py; command_listener.py SELF_SOURCE).
+const SIM_SOURCE = 'simulator.py'
+// Paths the simulator always publishes; seeing one from SIM_SOURCE = simulator present.
+const DETECT_PATHS = ['steering.autopilot.state', 'navigation.position', 'navigation.speedOverGround']
+const RECHECK_MS = 5000
 const MODES = ['standby', 'auto', 'wind', 'route']
 // advanceMode cycle: standby -> auto -> wind -> route -> standby
 const NEXT_MODE = { standby: 'auto', auto: 'wind', wind: 'route', route: 'standby' }
@@ -32,11 +45,31 @@ const PATHS = {
   adjustHeading: 'steering.autopilot.actions.adjustHeading',
   headingTrue: 'steering.autopilot.target.headingTrue',
   tack: 'steering.autopilot.actions.tack',
-  advanceMode: 'steering.autopilot.actions.advanceMode'
+  advanceMode: 'steering.autopilot.actions.advanceMode',
+  advanceWaypoint: 'steering.autopilot.actions.advanceWaypoint'
 }
 
-const ok = () => ({ state: 'COMPLETED', statusCode: 200 })
-const bad = (message) => ({ state: 'COMPLETED', statusCode: 400, message })
+const SIMULATED = 'SIMULATED: sent to the yey.boats simulator only, no real autopilot'
+const ok = () => ({ state: 'COMPLETED', statusCode: 200, simulated: true, message: SIMULATED })
+const bad = (message) => ({ state: 'COMPLETED', statusCode: 400, simulated: true, message: `${SIMULATED}; ${message}` })
+const unavailable = (message) => ({ state: 'COMPLETED', statusCode: 503, simulated: true, message })
+
+const isSimSource = (src) => typeof src === 'string' && (src === SIM_SOURCE || src.endsWith(`.${SIM_SOURCE}`))
+
+// True when the server's self model holds data the simulator wrote. Fails
+// closed: no getSelfPath, or any error, means "not detected".
+function simulatorDetected (app) {
+  if (typeof app.getSelfPath !== 'function') return false
+  for (const path of DETECT_PATHS) {
+    try {
+      const node = app.getSelfPath(path)
+      if (!node || typeof node !== 'object') continue
+      if (isSimSource(node.$source)) return true
+      if (node.values && typeof node.values === 'object' && Object.keys(node.values).some(isSimSource)) return true
+    } catch (e) { /* not detected */ }
+  }
+  return false
+}
 
 // Mode string -> simulator mode, or null when not a valid mode.
 // Strips surrounding quotes (some clients send a JSON-encoded string) and maps
@@ -60,7 +93,12 @@ function toFinite (value) {
 }
 
 module.exports = function yeySimAutopilot (app) {
-  let running = false
+  // armed: PUTs are answered. Only true after start() saw the simulator (or the
+  // simulation option); stop() clears it. SignalK has no unregisterPutHandler,
+  // so handlers registered in an earlier start stay and must check it.
+  let armed = false
+  let registered = false
+  let timer = null
   let seq = 0
   let lastMode = null
 
@@ -132,7 +170,52 @@ module.exports = function yeySimAutopilot (app) {
     [PATHS.advanceMode]: () => {
       setMode(NEXT_MODE[currentMode()])
       return ok()
+    },
+    // Skip to the next route waypoint (the connector allowlist sends 1). Only
+    // meaningful while following the route, as with signalk-autopilot.
+    [PATHS.advanceWaypoint]: () => {
+      const mode = currentMode()
+      if (mode !== 'route') return bad(`advanceWaypoint needs route mode, autopilot is in ${mode}`)
+      emit('advance_waypoint', 1)
+      return ok()
     }
+  }
+
+  const status = (msg) => { if (app.setPluginStatus) app.setPluginStatus(msg) }
+  const failure = (msg) => {
+    if (app.setPluginError) app.setPluginError(msg)
+    else if (app.error) app.error(msg)
+  }
+
+  const register = () => {
+    if (registered) return true
+    if (typeof app.registerPutHandler !== 'function') {
+      failure('registerPutHandler unavailable; autopilot PUTs not handled')
+      return false
+    }
+    for (const [path, handle] of Object.entries(handlers)) {
+      try {
+        app.registerPutHandler('vessels.self', path, (context, p, value) => {
+          if (!armed) return unavailable(`${PLUGIN_ID} is not active (no yey.boats simulator detected)`)
+          return handle(value)
+        }, PLUGIN_ID)
+      } catch (e) {
+        if (app.debug) app.debug(`could not register PUT handler for ${path}: ${e.message}`)
+      }
+    }
+    registered = true
+    return true
+  }
+
+  const arm = (why) => {
+    if (timer) { clearInterval(timer); timer = null }
+    if (!register()) return
+    armed = true
+    status(`SIMULATED autopilot: handling autopilot PUTs for the yey.boats simulator (${why})`)
+  }
+
+  const recheck = () => {
+    if (!armed && simulatorDetected(app)) arm(`detected "${SIM_SOURCE}" data`)
   }
 
   const plugin = {
@@ -140,29 +223,38 @@ module.exports = function yeySimAutopilot (app) {
     name: 'Yey Boats simulator autopilot (SIMULATOR ONLY)',
     description: 'Translates SignalK autopilot PUTs into the yey.boats simulator\'s ' +
       'steering.autopilot.command delta. Only for the simulator\'s SignalK server — never a real boat.',
-    schema: () => ({ type: 'object', properties: {} }),
-    start: () => {
-      running = true
-      if (typeof app.registerPutHandler !== 'function') {
-        if (app.error) app.error('registerPutHandler unavailable; autopilot PUTs not handled')
-        return
-      }
-      for (const [path, handle] of Object.entries(handlers)) {
-        try {
-          app.registerPutHandler('vessels.self', path, (context, p, value) => {
-            // SignalK has no unregisterPutHandler on older servers; refuse while stopped.
-            if (!running) return { state: 'COMPLETED', statusCode: 503, message: `${PLUGIN_ID} is stopped` }
-            return handle(value)
-          }, PLUGIN_ID)
-        } catch (e) {
-          if (app.debug) app.debug(`could not register PUT handler for ${path}: ${e.message}`)
+    schema: () => ({
+      type: 'object',
+      properties: {
+        simulation: {
+          type: 'boolean',
+          title: 'Simulation (skip simulator detection)',
+          description: 'Handle autopilot PUTs even if no data from the simulator ' +
+            `("${SIM_SOURCE}") is seen. Only for a simulator server. Never on a real boat.`,
+          default: false
         }
       }
-      if (app.setPluginStatus) app.setPluginStatus('Handling autopilot PUTs for the simulator')
+    }),
+    start: (options) => {
+      armed = false
+      if (options && options.simulation === true) {
+        arm('simulation option')
+        return
+      }
+      if (simulatorDetected(app)) {
+        arm(`detected "${SIM_SOURCE}" data`)
+        return
+      }
+      status(`Not handling autopilot PUTs: no yey.boats simulator detected (no "${SIM_SOURCE}" data). ` +
+        'SIMULATOR ONLY: on a real boat, uninstall this plugin.')
+      timer = setInterval(recheck, RECHECK_MS)
+      if (timer.unref) timer.unref()
     },
     stop: () => {
-      running = false
-    }
+      armed = false
+      if (timer) { clearInterval(timer); timer = null }
+    },
+    _recheck: recheck
   }
 
   return plugin
@@ -171,4 +263,6 @@ module.exports = function yeySimAutopilot (app) {
 module.exports.PLUGIN_ID = PLUGIN_ID
 module.exports.COMMAND_PATH = COMMAND_PATH
 module.exports.PATHS = PATHS
+module.exports.SIM_SOURCE = SIM_SOURCE
+module.exports.simulatorDetected = simulatorDetected
 module.exports.normaliseMode = normaliseMode

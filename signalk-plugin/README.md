@@ -5,6 +5,11 @@
 > boat: it answers autopilot PUTs as `COMPLETED` but steers nothing except the
 > simulator. A real boat uses its own autopilot plugin (e.g. `signalk-autopilot`
 > or the vendor's plugin).
+>
+> As a safety net, the plugin only handles PUTs once it **detects the
+> simulator** (see [Simulator detection](#simulator-detection)). On a server
+> without the simulator it registers nothing and its status says
+> *Not handling autopilot PUTs: no yey.boats simulator detected*.
 
 A small SignalK server plugin (plugin id **`yey-sim-autopilot`**) that turns the
 standard SignalK autopilot PUTs sent by dashboards and the yey-display ESP32
@@ -23,14 +28,44 @@ modeled autopilot (`engine/autopilot.py`).
 | `steering.autopilot.target.headingTrue` | finite number, **radians** | `set_heading` with the radians unchanged |
 | `steering.autopilot.actions.tack` | `"port"`, `"starboard"` or `true` | `tack` (value `"port"`/`"starboard"`, or `null` for `true`) |
 | `steering.autopilot.actions.advanceMode` | any value | `set_mode` with the next mode in the cycle standby → auto → wind → route → standby |
+| `steering.autopilot.actions.advanceWaypoint` | any value (the connector sends `1`); **route mode only**, else 400 | `advance_waypoint`: the simulator skips to the next route waypoint |
+
+These cover the remote-steering actions the connector's steering policy
+(`signalk-yey-connector` `lib/steering-policy.js`) allows: `adjustHeading`,
+`tack`, `advanceMode`, `advanceWaypoint`, plus `state` and
+`target.headingTrue`. The policy also lists `target.headingMagnetic` and
+`target.windAngleApparent`; the simulator has no model for those, so they are
+not registered (SignalK answers 405).
 
 `advanceMode` starts from the live `steering.autopilot.state` the simulator
 publishes (read via `app.getSelfPath`). If that value is missing, it starts from
 the last mode this plugin sent, and from `standby` if the plugin has sent none.
 
-A valid PUT returns `{state: "COMPLETED", statusCode: 200}`. An invalid value
-returns `statusCode: 400` with a message and sends nothing. While the plugin is
-stopped, PUTs return 503.
+A valid PUT returns `{state: "COMPLETED", statusCode: 200, simulated: true,
+message: "SIMULATED: sent to the yey.boats simulator only, no real autopilot"}`.
+An invalid value returns `statusCode: 400`, `simulated: true` and a message,
+and sends nothing. While the plugin is stopped, or after a restart that no
+longer detects the simulator, PUTs return 503 (SignalK cannot unregister a PUT
+handler, so handlers from an earlier start stay registered but refuse).
+
+## Simulator detection
+
+On start the plugin looks at the server's own data for values whose `$source`
+is `simulator.py`, the label the simulator writes on every delta (the same one
+its command listener uses to skip its own deltas). It checks
+`steering.autopilot.state`, `navigation.position` and
+`navigation.speedOverGround`, including the per-source `values` map. If it
+finds one, it registers the PUT handlers and sets the status to
+*SIMULATED autopilot: handling autopilot PUTs ...*. If not, it registers
+nothing and re-checks every 5 s, so a simulator that connects after SignalK
+starts is still picked up.
+
+The demo boat needs **no configuration**: boat-sim writes `simulator.py` data,
+so the committed `{"enabled": true, "configuration": {}}` keeps working.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `simulation` | `false` | Skip detection and handle PUTs straight away. Only for a simulator setup that does not write `simulator.py` data. Never set it on a real boat. |
 
 The simulator converts radians back to degrees for `adjust` and `set_heading`.
 The command delta's `$source` is the plugin id. The simulator ignores only
