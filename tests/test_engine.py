@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-from datetime import datetime, UTC
+from datetime import datetime, timedelta, UTC
 
 import pytest  # type: ignore[import]
 
@@ -94,3 +94,26 @@ async def test_set_and_clear_fault_command_toggles_faultstate():
     assert not eng.faults.is_active("gps_degraded")  # noqa: S101
     snap2 = await eng.tick(now)
     assert snap2.gnss_quality == "GNSS Fix"  # noqa: S101
+
+
+@pytest.mark.asyncio
+async def test_moored_boat_does_not_report_sog_from_polar_or_current():
+    """Issue #8: while SimState.MOORED, navigation.speedOverGround was reading
+    ~5 kn because the navigator fell through to the sailing polar-speed +
+    current-drift path. Tick several minutes at a time well outside the
+    sailing window (so the schedule stays MOORED regardless of wind) and
+    assert SOG/STW stay near zero and the boat does not leave the berth."""
+    eng = _engine()
+    assert eng.sched.state.value == "moored"  # noqa: S101
+    lat0, lon0 = eng.nav_state.lat, eng.nav_state.lon
+    # 22:00 UTC -> 00:00 local (Adriatic, UTC+2): outside the 07:00-18:00
+    # sailing window, so Schedule.try_depart keeps the boat MOORED every tick
+    # no matter what the (randomised) wind sample is.
+    now = datetime(2026, 11, 8, 22, 0, 0, tzinfo=UTC)
+    for i in range(180):
+        snap = await eng.tick(now + timedelta(seconds=i))
+    assert eng.sched.state.value == "moored"  # noqa: S101
+    assert snap.nav.sog_kts < 0.2  # noqa: S101
+    assert snap.nav.stw_kts < 0.2  # noqa: S101
+    assert abs(snap.nav.lat - lat0) < 1e-6  # noqa: S101
+    assert abs(snap.nav.lon - lon0) < 1e-6  # noqa: S101

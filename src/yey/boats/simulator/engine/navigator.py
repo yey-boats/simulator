@@ -167,7 +167,11 @@ class Navigator:
                       tws_kts: float, twd_deg: float,
                       sim_state: SimState) -> float:
         """Heading the boat would steer in ROUTE mode (motoring = straight to the
-        waypoint; sailing = VMG-optimised tacking toward it)."""
+        waypoint; sailing = VMG-optimised tacking toward it; moored/bora_hold =
+        hold the current heading — the boat is tied up at the berth, not
+        steering toward the next waypoint; see issue #8)."""
+        if sim_state in (SimState.MOORED, SimState.BORA_HOLD):
+            return state.hdg_deg
         if sim_state == SimState.MOTORED:
             return wp_bearing
         return self.sail_heading(state.lat, state.lon, wp_bearing, twd_deg, tws_kts)
@@ -187,10 +191,13 @@ class Navigator:
         # override as the single, final source of hdg so the wander always
         # reaches nav_state.hdg_deg (and thus the emitted delta) in every mode.
         # See test_heading_wander.py::test_emitted_heading_wanders_and_rudder_*.
+        moored = sim_state in (SimState.MOORED, SimState.BORA_HOLD)
         if heading_override is not None:
             target_hdg = heading_override
         elif sim_state == SimState.MOTORED:
             target_hdg = wp_bearing
+        elif moored:
+            target_hdg = state.hdg_deg
         else:
             target_hdg = self.sail_heading(state.lat, state.lon, wp_bearing,
                                            twd_deg, tws_kts)
@@ -207,13 +214,21 @@ class Navigator:
         # sea-state / helm efficiency so performance.polarSpeedRatio lands <1.0.
         if sim_state == SimState.MOTORED:
             stw = MOTOR_STW_KTS
+        elif moored:
+            stw = 0.0
         else:
             stw = self._polars.boat_speed(tws_kts, abs(_normalise_angle(twd_deg - hdg)))
             stw *= efficiency
 
         twa = _normalise_angle(twd_deg - hdg)
         aws, awa = _apparent_wind(stw, hdg, tws_kts, twd_deg)
-        sog, cog = self._apply_current(stw, hdg)
+        if moored:
+            # Tied up at the berth: no polar/current-driven drift. SOG/STW stay
+            # at 0 and dead-reckoning with sog=0 leaves the position unchanged
+            # (see issue #8 — "moored still reports SOG ~5 kn").
+            sog, cog = 0.0, hdg
+        else:
+            sog, cog = self._apply_current(stw, hdg)
         lat, lon = self._dead_reckon(state.lat, state.lon, sog, cog, dt_s)
         depth = self._depth_at(lat, lon)
         heel  = self.compute_heel(tws_kts, twa)
