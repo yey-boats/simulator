@@ -1,14 +1,35 @@
+# Tag-triggered release. Push a tag v<version> (matching pyproject.toml) and this
+# publishes the image to GHCR (and, when enabled, the wheel to PyPI).
+# See docs/RELEASING.md for the full flow.
 name: release
 on:
   push:
     tags: ["v*"]
 permissions:
   contents: read
-  id-token: write   # PyPI trusted publishing (OIDC)
 jobs:
+  # Gate: the tag must equal pyproject.toml's version, __version__, the
+  # signalk-plugin package.json and a dated CHANGELOG section. Nothing is
+  # published from a mismatched tag.
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python scripts/check_version.py "${{ github.ref_name }}"
+      - id: v
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
   pypi:
+    needs: version
     runs-on: ubuntu-latest
     environment: release        # gate: configure secrets/approval before enabling
+    permissions:
+      contents: read
+      id-token: write   # PyPI trusted publishing (OIDC)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,6 +47,7 @@ jobs:
         if: ${{ vars.PUBLISH_PYPI == 'true' }}
         uses: pypa/gh-action-pypi-publish@release/v1
   image:
+    needs: version
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -39,11 +61,23 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # ghcr.io/yey-boats/simulator:<x.y.z>, :<x.y> and :v<x.y.z>. A release does
+      # not move the rolling tag; ci.yml owns it (it tracks main).
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          flavor: latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=tag
       - uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-            ghcr.io/${{ github.repository }}:latest
+          build-args: |
+            VERSION=${{ needs.version.outputs.version }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
