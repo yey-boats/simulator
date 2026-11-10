@@ -8,6 +8,13 @@
   and re-emits each one as the sim's `steering.autopilot.command` delta. It
   replaces the autopilot bridge that used to live in Instruments-manager.
   Tested with `node --test` against a fake `app`.
+- `signalk-yey-sim-autopilot` handles PUTs only while the simulator is live
+  (#14): it registers its handlers once it sees fresh `simulator.py` data (or
+  the `simulation` option), answers 503 "simulator not seen" after
+  `simulatorTimeoutMinutes` (default 2) without fresh data and resumes when it
+  reappears, re-registers its handlers after a plugin restart (the server drops
+  them on stop), and accepts only `1` for `actions.advanceWaypoint` (route
+  mode), matching the connector's steering policy.
 - Navigator return-to-course rule (`engine/navigator.py` `RouteResume`): when an
   autopilot command takes the boat out of route mode while a route is active,
   route mode is re-engaged once `resume_route_after_s` seconds (default 300,

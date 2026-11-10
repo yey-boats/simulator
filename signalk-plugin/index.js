@@ -24,9 +24,13 @@
 // PUT handlers only once it sees the simulator on this server: the simulator
 // writes every delta with `$source: "simulator.py"` (the same label its own
 // command listener filters on). Until then, or on a real boat, it handles
-// nothing and its plugin status says so. The `simulation: true` option skips
-// detection for a sim setup that relabels its source. Every answer carries
-// `simulated: true` and a "SIMULATED" message.
+// nothing and its plugin status says so. The simulator must also be LIVE: once
+// no fresh `simulator.py` data has been seen for `simulatorTimeoutMinutes`
+// (default 2), PUTs get 503 "simulator not seen" until it reappears (the server
+// keeps the sim's last values after it disconnects, so presence alone is not
+// enough). The `simulation: true` option skips detection for a sim setup that
+// relabels its source. Every answer carries `simulated: true` and a
+// "SIMULATED" message.
 
 const PLUGIN_ID = 'yey-sim-autopilot'
 const COMMAND_PATH = 'steering.autopilot.command'
@@ -36,6 +40,7 @@ const SIM_SOURCE = 'simulator.py'
 // Paths the simulator always publishes; seeing one from SIM_SOURCE = simulator present.
 const DETECT_PATHS = ['steering.autopilot.state', 'navigation.position', 'navigation.speedOverGround']
 const RECHECK_MS = 5000
+const DEFAULT_TIMEOUT_MIN = 2
 const MODES = ['standby', 'auto', 'wind', 'route']
 // advanceMode cycle: standby -> auto -> wind -> route -> standby
 const NEXT_MODE = { standby: 'auto', auto: 'wind', wind: 'route', route: 'standby' }
@@ -56,19 +61,30 @@ const unavailable = (message) => ({ state: 'COMPLETED', statusCode: 503, simulat
 
 const isSimSource = (src) => typeof src === 'string' && (src === SIM_SOURCE || src.endsWith(`.${SIM_SOURCE}`))
 
-// True when the server's self model holds data the simulator wrote. Fails
-// closed: no getSelfPath, or any error, means "not detected".
-function simulatorDetected (app) {
-  if (typeof app.getSelfPath !== 'function') return false
+// The timestamps of every simulator-written value on the detect paths, as
+// {key: timestamp} (key = path + source). Fails closed: no getSelfPath, or any
+// error, gives none.
+function simulatorStamps (app) {
+  const out = {}
+  if (typeof app.getSelfPath !== 'function') return out
   for (const path of DETECT_PATHS) {
     try {
       const node = app.getSelfPath(path)
       if (!node || typeof node !== 'object') continue
-      if (isSimSource(node.$source)) return true
-      if (node.values && typeof node.values === 'object' && Object.keys(node.values).some(isSimSource)) return true
+      if (isSimSource(node.$source)) out[`${path}|${node.$source}`] = String(node.timestamp)
+      if (node.values && typeof node.values === 'object') {
+        for (const [src, v] of Object.entries(node.values)) {
+          if (isSimSource(src)) out[`${path}|${src}`] = String(v && v.timestamp)
+        }
+      }
     } catch (e) { /* not detected */ }
   }
-  return false
+  return out
+}
+
+// True when the server's self model holds data the simulator wrote (fresh or not).
+function simulatorDetected (app) {
+  return Object.keys(simulatorStamps(app)).length > 0
 }
 
 // Mode string -> simulator mode, or null when not a valid mode.
@@ -92,12 +108,21 @@ function toFinite (value) {
   return null
 }
 
-module.exports = function yeySimAutopilot (app) {
-  // armed: PUTs are answered. Only true after start() saw the simulator (or the
-  // simulation option); stop() clears it. SignalK has no unregisterPutHandler,
-  // so handlers registered in an earlier start stay and must check it.
+// `deps.now` (wall clock, ms) is injectable for tests.
+module.exports = function yeySimAutopilot (app, deps = {}) {
+  const now = typeof deps.now === 'function' ? deps.now : Date.now
+  // armed: PUTs are answered. True while the simulator is live (or with the
+  // simulation option); stop() clears it. Current servers drop a plugin's PUT
+  // handlers when it stops (registerPutHandler queues the de-register on the
+  // plugin's stop handlers), so stop() also forgets `registered` and the next
+  // start() registers again. Handlers check `armed` in case an older server
+  // kept them.
   let armed = false
   let registered = false
+  let forced = false // simulation option: never un-detect
+  let timeoutMs = DEFAULT_TIMEOUT_MIN * 60000
+  let lastSeen = -Infinity // wall-clock ms of the last fresh simulator data
+  let stamps = null // simulatorStamps() at the previous look
   let timer = null
   let seq = 0
   let lastMode = null
@@ -171,9 +196,11 @@ module.exports = function yeySimAutopilot (app) {
       setMode(NEXT_MODE[currentMode()])
       return ok()
     },
-    // Skip to the next route waypoint (the connector allowlist sends 1). Only
-    // meaningful while following the route, as with signalk-autopilot.
-    [PATHS.advanceWaypoint]: () => {
+    // Skip to the next route waypoint. The value must be exactly 1, as in the
+    // connector's steering policy (signalk-yey-connector lib/steering-policy.js)
+    // and signalk-autopilot. Only meaningful while following the route.
+    [PATHS.advanceWaypoint]: (value) => {
+      if (value !== 1) return bad(`advanceWaypoint expects 1, got ${JSON.stringify(value)}`)
       const mode = currentMode()
       if (mode !== 'route') return bad(`advanceWaypoint needs route mode, autopilot is in ${mode}`)
       emit('advance_waypoint', 1)
@@ -196,7 +223,12 @@ module.exports = function yeySimAutopilot (app) {
     for (const [path, handle] of Object.entries(handlers)) {
       try {
         app.registerPutHandler('vessels.self', path, (context, p, value) => {
-          if (!armed) return unavailable(`${PLUGIN_ID} is not active (no yey.boats simulator detected)`)
+          if (!forced) look()
+          if (!armed) {
+            return unavailable(registered
+              ? `${PLUGIN_ID}: simulator not seen for ${timeoutMin()} min; not handling autopilot PUTs`
+              : `${PLUGIN_ID} is not active (no yey.boats simulator detected)`)
+          }
           return handle(value)
         }, PLUGIN_ID)
       } catch (e) {
@@ -207,16 +239,39 @@ module.exports = function yeySimAutopilot (app) {
     return true
   }
 
+  const timeoutMin = () => Math.round((timeoutMs / 60000) * 100) / 100
+
   const arm = (why) => {
-    if (timer) { clearInterval(timer); timer = null }
     if (!register()) return
     armed = true
     status(`SIMULATED autopilot: handling autopilot PUTs for the yey.boats simulator (${why})`)
   }
 
-  const recheck = () => {
-    if (!armed && simulatorDetected(app)) arm(`detected "${SIM_SOURCE}" data`)
+  const disarm = () => {
+    armed = false
+    status(`Not handling autopilot PUTs: yey.boats simulator not seen for ${timeoutMin()} min ` +
+      `(no fresh "${SIM_SOURCE}" data); PUTs get 503 until it reappears. ` +
+      'SIMULATOR ONLY: on a real boat, uninstall this plugin.')
   }
+
+  // Fresh = a simulator timestamp within the timeout of the wall clock, or one
+  // that changed since the previous look (the sim may run on its own clock).
+  // An unchanged old value is what the server keeps after the sim disconnects.
+  const look = () => {
+    const t = now()
+    const cur = simulatorStamps(app)
+    for (const [key, ts] of Object.entries(cur)) {
+      const ms = Date.parse(ts)
+      if (Number.isFinite(ms) && ms <= t + timeoutMs && t - ms <= timeoutMs) lastSeen = Math.max(lastSeen, Math.min(ms, t))
+      if (stamps && key in stamps && stamps[key] !== ts) lastSeen = t
+    }
+    stamps = cur
+    const live = t - lastSeen <= timeoutMs
+    if (live && !armed) arm(`detected fresh "${SIM_SOURCE}" data`)
+    else if (!live && armed) disarm()
+  }
+
+  const recheck = () => { if (!forced) look() }
 
   const plugin = {
     id: PLUGIN_ID,
@@ -232,26 +287,40 @@ module.exports = function yeySimAutopilot (app) {
           description: 'Handle autopilot PUTs even if no data from the simulator ' +
             `("${SIM_SOURCE}") is seen. Only for a simulator server. Never on a real boat.`,
           default: false
+        },
+        simulatorTimeoutMinutes: {
+          type: 'number',
+          title: 'Stop handling PUTs after the simulator is silent for (minutes)',
+          description: `With no fresh "${SIM_SOURCE}" data for this long, PUTs get 503 until the simulator reappears.`,
+          default: DEFAULT_TIMEOUT_MIN
         }
       }
     }),
     start: (options) => {
       armed = false
+      forced = false
+      lastSeen = -Infinity
+      stamps = null
+      const min = options && Number(options.simulatorTimeoutMinutes)
+      timeoutMs = (Number.isFinite(min) && min > 0 ? min : DEFAULT_TIMEOUT_MIN) * 60000
       if (options && options.simulation === true) {
+        forced = true
         arm('simulation option')
         return
       }
-      if (simulatorDetected(app)) {
-        arm(`detected "${SIM_SOURCE}" data`)
-        return
+      look()
+      if (!armed) {
+        status(`Not handling autopilot PUTs: no yey.boats simulator detected (no fresh "${SIM_SOURCE}" data). ` +
+          'SIMULATOR ONLY: on a real boat, uninstall this plugin.')
       }
-      status(`Not handling autopilot PUTs: no yey.boats simulator detected (no "${SIM_SOURCE}" data). ` +
-        'SIMULATOR ONLY: on a real boat, uninstall this plugin.')
       timer = setInterval(recheck, RECHECK_MS)
       if (timer.unref) timer.unref()
     },
     stop: () => {
       armed = false
+      // The server removes this plugin's PUT handlers on stop; register again
+      // on the next start.
+      registered = false
       if (timer) { clearInterval(timer); timer = null }
     },
     _recheck: recheck
@@ -265,4 +334,5 @@ module.exports.COMMAND_PATH = COMMAND_PATH
 module.exports.PATHS = PATHS
 module.exports.SIM_SOURCE = SIM_SOURCE
 module.exports.simulatorDetected = simulatorDetected
+module.exports.simulatorStamps = simulatorStamps
 module.exports.normaliseMode = normaliseMode
