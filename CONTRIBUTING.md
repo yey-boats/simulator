@@ -2,6 +2,8 @@
 
 Thanks for your interest in `yey-boats-simulator`.
 
+Releases are tag-triggered; see [docs/RELEASING.md](docs/RELEASING.md).
+
 ## License of contributions
 
 This project is source-available under the [PolyForm Noncommercial License

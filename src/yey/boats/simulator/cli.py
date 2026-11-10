@@ -6,12 +6,14 @@ import argparse
 import asyncio
 from pathlib import Path
 
+from yey.boats.simulator import __version__  # type: ignore[import]
 from yey.boats.simulator.config import Settings  # type: ignore[import]
 
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="yey-boats-sim",
                                 description="Adriatic sailing boat simulator.")
+    p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     p.add_argument("--sink", choices=["signalk", "stdout", "nmea0183", "nmea2000"],
                    default=None, help="primary output sink (default: env SINK or signalk)")
     p.add_argument("--signalk-host", default=None)

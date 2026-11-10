@@ -20,7 +20,13 @@ RUN python -m build --wheel --outdir /dist
 
 # ── Stage 3: lean runtime image ────────────────────────────────────────────
 FROM python:3.13-slim AS runtime
-ENV PYTHONUNBUFFERED=1 \
+# Release version, passed by .github/workflows/release.yml (VERSION=<x.y.z>);
+# "dev" for local and main-branch builds. Also: `yey-boats-sim --version`.
+ARG VERSION=dev
+LABEL org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.source="https://github.com/yey-boats/simulator"
+ENV SIM_VERSION="${VERSION}" \
+    PYTHONUNBUFFERED=1 \
     SINK=signalk \
     DATA_DIR=/data \
     SIM_WEB_HOST=0.0.0.0
