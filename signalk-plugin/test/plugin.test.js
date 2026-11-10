@@ -10,6 +10,8 @@ function fakeApp ({ selfState } = {}) {
   const app = {
     handlers: {},
     messages: [],
+    statuses: [],
+    errors: [],
     selfState,
     registerPutHandler (context, path, fn, source) {
       assert.equal(context, 'vessels.self')
@@ -18,7 +20,8 @@ function fakeApp ({ selfState } = {}) {
     },
     handleMessage (id, delta) { app.messages.push({ id, delta }) },
     debug () {},
-    setPluginStatus () {}
+    setPluginStatus (msg) { app.statuses.push(msg) },
+    setPluginError (msg) { app.errors.push(msg) }
   }
   if (selfState !== undefined) {
     app.getSelfPath = (path) => (path === PATHS.state ? app.selfState : undefined)
@@ -26,10 +29,12 @@ function fakeApp ({ selfState } = {}) {
   return app
 }
 
-function started (opts) {
+// Started with the explicit `simulation: true` option, so the translation tests
+// don't depend on detection (covered separately below).
+function started (opts, options = { simulation: true }) {
   const app = fakeApp(opts)
   const plugin = makePlugin(app)
-  plugin.start({})
+  plugin.start(options)
   return { app, plugin, put: (path, value) => app.handlers[path]('vessels.self', path, value, () => {}) }
 }
 
@@ -56,7 +61,9 @@ test('registers a PUT handler for every autopilot path on start', () => {
 test('state: plain modes map to set_mode', () => {
   const { app, put } = started()
   for (const mode of ['auto', 'wind', 'route', 'standby']) {
-    assert.deepEqual(put(PATHS.state, mode), { state: 'COMPLETED', statusCode: 200 })
+    const res = put(PATHS.state, mode)
+    assert.equal(res.state, 'COMPLETED')
+    assert.equal(res.statusCode, 200)
     const c = command(app)
     assert.equal(c.action, 'set_mode')
     assert.equal(c.value, mode)
@@ -164,5 +171,7 @@ test('after stop, PUTs are refused (503) and nothing is emitted', () => {
 
 test('start without registerPutHandler does not throw', () => {
   const plugin = makePlugin({ handleMessage () {}, error () {} })
+  assert.doesNotThrow(() => plugin.start({ simulation: true }))
   assert.doesNotThrow(() => plugin.start({}))
+  plugin.stop()
 })

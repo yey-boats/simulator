@@ -106,6 +106,14 @@ class Engine:
         route_active = self._route_active()
         while self._cmd_queue:
             action, arg = self._cmd_queue.pop(0)
+            if (action or "").strip().lower() == "advance_waypoint":
+                # SignalK actions.advanceWaypoint: skip to the next waypoint,
+                # only while following the route (as signalk-autopilot does).
+                if self.autopilot.state.mode == "route" and route_active:
+                    self.route.advance()
+                    print(f"[engine] advance_waypoint -> next {self.route.next_wp.name}",
+                          flush=True)
+                continue
             mode_before = self.autopilot.state.mode
             self.autopilot.apply(action, arg,
                                  current_heading_deg=self.nav_state.hdg_deg, twd_deg=twd)
