@@ -26,10 +26,11 @@ class FakeAIS:
         return [AisContact("111", lat + 0.01, lon + 0.01, 90.0, 10.0, "X", 70)]
 
 
-def _engine():
+def _engine(start_latlon=None):
     route = Route.load(resources.route_kmz(), resources.marinas_json())
     polars = Polars.load(resources.polar_csv())
-    start = NavState(lat=route.current.lat, lon=route.current.lon,
+    lat, lon = start_latlon or (route.current.lat, route.current.lon)
+    start = NavState(lat=lat, lon=lon,
                      hdg_deg=route.current.berth_heading, cog_deg=0, sog_kts=0,
                      stw_kts=0, twa_deg=0, tws_kts=0, twd_deg=0, awa_deg=0,
                      aws_kts=0, heel_deg=0, depth_m=10.0)
@@ -164,3 +165,45 @@ async def test_night_arrival_at_a_marina_moors():
     await eng.tick(datetime(2026, 11, 8, 22, 0, 0, tzinfo=UTC))
     assert eng.route.current.name == "open1"  # noqa: S101
     assert eng.sched.state == SimState.MOORED  # noqa: S101
+
+
+@pytest.mark.asyncio
+async def test_a_night_start_in_open_water_is_under_way_not_moored():
+    """Review of #12: Schedule() starts MOORED; an engine started (or resumed)
+    mid-leg at night must not sit at SOG 0 until 07:00."""
+    from yey.boats.simulator.engine.route import dead_reckon
+    probe = _engine()
+    lat, lon = dead_reckon(probe.route.current.lat, probe.route.current.lon, 6.0, 200.0, 3600.0)
+    eng = _engine(start_latlon=(lat, lon))
+    assert eng.sched.state != SimState.MOORED  # noqa: S101
+    now = datetime(2026, 11, 8, 22, 0, 0, tzinfo=UTC)
+    for i in range(120):
+        snap = await eng.tick(now + timedelta(seconds=i))
+    assert eng.sched.state != SimState.MOORED  # noqa: S101
+    assert snap.nav.sog_kts > 1.0  # noqa: S101
+
+
+def test_a_start_at_a_marina_is_moored():
+    eng = _engine()
+    assert eng.sched.state == SimState.MOORED  # noqa: S101
+
+
+@pytest.mark.asyncio
+async def test_refills_use_the_arrived_marina_and_skip_open_water(monkeypatch):
+    eng = _engine()
+    wps = _open_water_route(eng)
+    calls = []
+    monkeypatch.setattr(eng.sys_, "on_marina_arrival", lambda *a: calls.append(a))
+    eng.route.current.refill_water = False      # the waypoint being left
+    eng.sched.state = SimState.SAILING
+    eng.autopilot.apply("set_mode", "route", current_heading_deg=eng.nav_state.hdg_deg, twd_deg=0.0)
+    now = datetime(2026, 11, 8, 22, 0, 0, tzinfo=UTC)
+    # Open-water arrival: no refill.
+    eng.nav_state.lat, eng.nav_state.lon = wps[1].lat, wps[1].lon
+    await eng.tick(now)
+    assert calls == []  # noqa: S101
+    # Marina arrival: refill with the arrived waypoint's own flags.
+    wps[2].marina, wps[2].refill_water, wps[2].refill_fuel, wps[2].pump_out_bw = "M", True, False, True
+    eng.nav_state.lat, eng.nav_state.lon = wps[2].lat, wps[2].lon
+    await eng.tick(now)
+    assert calls == [(True, False, True)]  # noqa: S101
