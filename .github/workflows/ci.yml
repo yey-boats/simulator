@@ -19,6 +19,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+      # The simulator-only autopilot SignalK plugin; no dependencies, so no install.
+      - name: signalk-plugin tests
+        run: npm test
+        working-directory: signalk-plugin
       - run: npm ci
         working-directory: frontend
       - run: npm run build

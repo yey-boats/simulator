@@ -317,7 +317,30 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
                   writer.metadata_loop(extra_load_names=META_LOADS, interval=2.0),
                   cmd_src.run()]
 
-    await asyncio.gather(*tasks)
+    await run_together(tasks)
+
+
+async def run_together(coros) -> None:
+    """Run the pipeline's coroutines as one unit: if any of them fails, cancel
+    the others before re-raising.
+
+    A bare `asyncio.gather` re-raises the first failure but leaves its sibling
+    tasks running. SimController then relaunches the pipeline, so every failed
+    start (e.g. SignalK still refusing connections at boot) leaked a whole
+    engine: its drive() loop kept writing vessels.self alongside the new one.
+    Boats ended up with several positions interleaved in one SignalK stream.
+    """
+    tasks = [asyncio.ensure_future(c) for c in coros]
+    try:
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
+        for t in done:
+            if not t.cancelled() and t.exception() is not None:
+                raise t.exception()  # type: ignore[misc]
+    finally:
+        for t in tasks:
+            if not t.done():
+                t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 async def run_with_web(settings: Settings, args) -> None:
