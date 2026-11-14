@@ -23,6 +23,7 @@ from yey.boats.simulator.engine.electrical import Electrical, solar_elevation_de
 from yey.boats.simulator.engine.lights import LightsModel  # type: ignore[import]
 from yey.boats.simulator.engine.navigator import Navigator, engine_fuel_L_h, engine_rpm  # type: ignore[import]
 from yey.boats.simulator.engine.performance import polar_efficiency  # type: ignore[import]
+from yey.boats.simulator.engine.route import haversine_nm  # type: ignore[import]
 from yey.boats.simulator.engine.schedule import Schedule, SimState  # type: ignore[import]
 from yey.boats.simulator.engine.snapshot import TelemetrySnapshot  # type: ignore[import]
 from yey.boats.simulator.engine.systems import Systems  # type: ignore[import]
@@ -46,6 +47,17 @@ class EngineCommandSink:
 
 
 class Engine:
+    _AT_MARINA_NM = 0.5
+
+    def _starts_at_marina(self, start_state: Any) -> bool:
+        wps = getattr(self.route, "waypoints", None) or []
+        lat, lon = getattr(start_state, "lat", None), getattr(start_state, "lon", None)
+        if lat is None or lon is None:
+            return True     # unknown position: keep the old default
+        return any(getattr(w, "marina", "") and
+                   haversine_nm(lat, lon, w.lat, w.lon) <= self._AT_MARINA_NM
+                   for w in wps)
+
     def __init__(self, route: Any, polars: Any, data_source: Any, ais_source: Any,
                  start_state: Any, grid: Any, data_dir: Any = None,
                  resume_route_after_s: float = DEFAULT_RESUME_ROUTE_AFTER_S) -> None:
@@ -71,6 +83,11 @@ class Engine:
         self.starter = StarterBattery()
         self.gnss = Gnss()
         self.nav_state = start_state
+        # Schedule() starts MOORED, and a moored boat holds SOG 0 (#8). Only
+        # stay moored if we start at a marina; a start (or resume) in open
+        # water is under way, or the boat would freeze until 07:00.
+        if not self._starts_at_marina(start_state):
+            self.sched.state = SimState.SAILING
         self._cmd_queue: list[tuple[str, Any]] = []
         self._last_wx = DEFAULT_WEATHER
         self._last_twd = 0.0
@@ -129,11 +146,16 @@ class Engine:
 
         if (self.autopilot.state.mode == "route"
                 and self.route.distance_to_next(self.nav_state.lat, self.nav_state.lon) < 0.3):
-            wp_meta = self.route.current
-            self.sched.on_waypoint_arrival()
+            wp_meta = self.route.next_wp      # the waypoint just reached
             self.route.advance()
-            self.sys_.on_marina_arrival(wp_meta.refill_water, wp_meta.refill_fuel,
-                                        wp_meta.pump_out_bw)
+            if wp_meta.marina:
+                # Only a marina stop moors the boat. Open-water waypoints
+                # (autoroute legs, random passages: marina="") are passed
+                # through; mooring there would freeze the boat mid-sea until
+                # the next sailing window (review of #12).
+                self.sched.on_waypoint_arrival()
+                self.sys_.on_marina_arrival(wp_meta.refill_water, wp_meta.refill_fuel,
+                                            wp_meta.pump_out_bw)
             print(f"[engine] arrived {wp_meta.name}, next {self.route.next_wp.name}", flush=True)
 
         if self.sched.lookahead_due:
