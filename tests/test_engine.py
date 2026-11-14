@@ -203,7 +203,8 @@ async def test_refills_use_the_arrived_marina_and_skip_open_water(monkeypatch):
     await eng.tick(now)
     assert calls == []  # noqa: S101
     # Marina arrival: refill with the arrived waypoint's own flags.
-    wps[2].marina, wps[2].refill_water, wps[2].refill_fuel, wps[2].pump_out_bw = "M", True, False, True
+    wps[2].marina = "M"
+    wps[2].refill_water, wps[2].refill_fuel, wps[2].pump_out_bw = True, False, True
     eng.nav_state.lat, eng.nav_state.lon = wps[2].lat, wps[2].lon
     await eng.tick(now)
     assert calls == [(True, False, True)]  # noqa: S101
