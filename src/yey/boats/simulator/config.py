@@ -13,6 +13,24 @@ from pathlib import Path
 
 _DEFAULT_DATA_DIR = Path(os.environ.get("DATA_DIR", "./run-data")).resolve()
 
+
+def _secret_from_env(var_name: str, default: str | None = None) -> str | None:
+    """Resolve a secret from `<var_name>_FILE` (read the file, stripped) if
+    set, else fall back to the plain `<var_name>` env var.
+
+    Mirrors the common Docker/Compose `_FILE`-suffix convention so secrets
+    can be mounted as files instead of landing in plain env vars (issue #7:
+    the board wraps the entrypoint to export them from secret files)."""
+    file_path = os.environ.get(f"{var_name}_FILE")
+    if file_path:
+        try:
+            return Path(file_path).read_text().strip()
+        except OSError as exc:
+            raise RuntimeError(
+                f"{var_name}_FILE={file_path!r} could not be read: {exc}"
+            ) from exc
+    return os.environ.get(var_name, default)
+
 # Boat vertical geometry (Beneteau O45): keel bottom below the waterline, and
 # the depth transducer below it. Single source of truth — the SignalK writer
 # imports these for its belowKeel/belowTransducer derivation.
@@ -92,8 +110,8 @@ class Settings:
             "signalk_port": (int(os.environ["SIGNALK_PORT"])
                             if "SIGNALK_PORT" in os.environ else None),
             "signalk_username": os.environ.get("SIGNALK_USERNAME"),
-            "signalk_password": os.environ.get("SIGNALK_PASSWORD"),
-            "aisstream_api_key": (os.environ.get("AISSTREAM_API_KEY", "").strip() or None),
+            "signalk_password": _secret_from_env("SIGNALK_PASSWORD"),
+            "aisstream_api_key": (_secret_from_env("AISSTREAM_API_KEY", "") or "").strip() or None,
             "sink": os.environ.get("SINK"),
             "weather_source": os.environ.get("WEATHER_SOURCE"),
             "failover": (os.environ["SINK_FAILOVER"] not in ("0", "false", "False")

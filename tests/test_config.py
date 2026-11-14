@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 from pathlib import Path
 
+import pytest
+
 from yey.boats.simulator.config import Settings
 
 
@@ -77,3 +79,51 @@ def test_from_env_warns_for_non_localhost_default_creds(monkeypatch, capsys):
     Settings.from_env()
     err = capsys.readouterr().err
     assert "WARNING" in err
+
+
+# ── issue #7: SIGNALK_PASSWORD_FILE / AISSTREAM_API_KEY_FILE ────────────────
+
+def test_signalk_password_file_takes_precedence(monkeypatch, tmp_path):
+    secret_file = tmp_path / "signalk_password"
+    secret_file.write_text("s3cr3t-from-file\n")
+    monkeypatch.setenv("SIGNALK_PASSWORD_FILE", str(secret_file))
+    monkeypatch.setenv("SIGNALK_PASSWORD", "plain-value-should-be-ignored")
+    s = Settings.from_env()
+    assert s.signalk_password == "s3cr3t-from-file"  # noqa: S101
+
+
+def test_aisstream_api_key_file_takes_precedence(monkeypatch, tmp_path):
+    secret_file = tmp_path / "aisstream_api_key"
+    secret_file.write_text("abc123\n")
+    monkeypatch.setenv("AISSTREAM_API_KEY_FILE", str(secret_file))
+    monkeypatch.setenv("AISSTREAM_API_KEY", "plain-value-should-be-ignored")
+    s = Settings.from_env()
+    assert s.aisstream_api_key == "abc123"  # noqa: S101
+
+
+def test_signalk_password_plain_env_still_works_without_file(monkeypatch):
+    monkeypatch.delenv("SIGNALK_PASSWORD_FILE", raising=False)
+    monkeypatch.setenv("SIGNALK_PASSWORD", "plain-password")
+    s = Settings.from_env()
+    assert s.signalk_password == "plain-password"  # noqa: S101
+
+
+def test_aisstream_api_key_plain_env_still_works_without_file(monkeypatch):
+    monkeypatch.delenv("AISSTREAM_API_KEY_FILE", raising=False)
+    monkeypatch.setenv("AISSTREAM_API_KEY", "plain-key")
+    s = Settings.from_env()
+    assert s.aisstream_api_key == "plain-key"  # noqa: S101
+
+
+def test_signalk_password_file_missing_raises_clear_error(monkeypatch, tmp_path):
+    missing = tmp_path / "does-not-exist"
+    monkeypatch.setenv("SIGNALK_PASSWORD_FILE", str(missing))
+    with pytest.raises(RuntimeError, match="SIGNALK_PASSWORD_FILE"):
+        Settings.from_env()
+
+
+def test_aisstream_api_key_file_missing_raises_clear_error(monkeypatch, tmp_path):
+    missing = tmp_path / "does-not-exist"
+    monkeypatch.setenv("AISSTREAM_API_KEY_FILE", str(missing))
+    with pytest.raises(RuntimeError, match="AISSTREAM_API_KEY_FILE"):
+        Settings.from_env()

@@ -28,6 +28,8 @@ pluggable output sinks.
 | `SIGNALK_USERNAME` | `--signalk-username` | `admin` | SignalK auth |
 | `SIGNALK_PASSWORD` | `--signalk-password` | `admin` | SignalK auth |
 | `AISSTREAM_API_KEY` | — | _(empty)_ | Real AIS feed; synthetic traffic if unset |
+| `SIGNALK_PASSWORD_FILE` | — | — | Path to a file holding the SignalK password; read instead of `SIGNALK_PASSWORD` when set |
+| `AISSTREAM_API_KEY_FILE` | — | — | Path to a file holding the AIS Stream API key; read instead of `AISSTREAM_API_KEY` when set |
 | `SINK` | `--sink` | `signalk` | `signalk` / `stdout` / `nmea0183`* / `nmea2000`* |
 | `SINK_FAILOVER` | `--no-failover` | on | Failover chain signalk->localhost->stdout |
 | `DATA_DIR` | `--data-dir` | `./run-data` | Writable dir for the depth cache |
