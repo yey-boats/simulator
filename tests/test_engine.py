@@ -9,6 +9,7 @@ from yey.boats.simulator.engine.geogrid import GeoGrid  # type: ignore[import]
 from yey.boats.simulator.engine.navigator import NavState  # type: ignore[import]
 from yey.boats.simulator.engine.polars import Polars  # type: ignore[import]
 from yey.boats.simulator.engine.route import Route  # type: ignore[import]
+from yey.boats.simulator.engine.schedule import SimState  # type: ignore[import]
 from yey.boats.simulator.engine.snapshot import AisContact, TelemetrySnapshot  # type: ignore[import]
 from yey.boats.simulator.engine.weather import DEFAULT_WEATHER  # type: ignore[import]
 
@@ -117,3 +118,49 @@ async def test_moored_boat_does_not_report_sog_from_polar_or_current():
     assert snap.nav.stw_kts < 0.2  # noqa: S101
     assert abs(snap.nav.lat - lat0) < 1e-6  # noqa: S101
     assert abs(snap.nav.lon - lon0) < 1e-6  # noqa: S101
+
+
+def _open_water_route(eng, legs_nm=6.0):
+    """Replace the route with open-water waypoints (marina="", as autoroute
+    legs and random passages produce) starting at the boat's position."""
+    from yey.boats.simulator.engine.route import Waypoint, dead_reckon
+    w0 = eng.route.current
+    wps = [w0]
+    lat, lon = eng.nav_state.lat, eng.nav_state.lon
+    for i in range(1, 4):
+        lat, lon = dead_reckon(lat, lon, legs_nm, 200.0, 3600.0)
+        wps.append(Waypoint(name=f"open{i}", lat=lat, lon=lon, marina="", berth_heading=0.0,
+                            refill_water=False, refill_fuel=False, pump_out_bw=False))
+    eng.route.waypoints = wps
+    eng.route.current_index = 0
+    return wps
+
+
+@pytest.mark.asyncio
+async def test_night_arrival_at_open_water_waypoint_keeps_the_boat_moving():
+    """Review of #12: reaching an open-water waypoint outside the sailing
+    window must not moor the boat (it would freeze mid-sea until 07:00)."""
+    eng = _engine()
+    wps = _open_water_route(eng)
+    eng.sched.state = SimState.SAILING
+    eng.autopilot.apply("set_mode", "route", current_heading_deg=eng.nav_state.hdg_deg, twd_deg=0.0)
+    # Put the boat right on top of open1 at night.
+    eng.nav_state.lat, eng.nav_state.lon = wps[1].lat, wps[1].lon
+    now = datetime(2026, 11, 8, 22, 0, 0, tzinfo=UTC)
+    snap = await eng.tick(now)
+    assert eng.route.current.name == "open1"  # noqa: S101  (arrived, advanced)
+    assert snap.state != SimState.MOORED  # noqa: S101
+    assert eng.sched.state != SimState.MOORED  # noqa: S101
+
+
+@pytest.mark.asyncio
+async def test_night_arrival_at_a_marina_moors():
+    eng = _engine()
+    wps = _open_water_route(eng)
+    wps[1].marina = "ACI Test"
+    eng.sched.state = SimState.SAILING
+    eng.autopilot.apply("set_mode", "route", current_heading_deg=eng.nav_state.hdg_deg, twd_deg=0.0)
+    eng.nav_state.lat, eng.nav_state.lon = wps[1].lat, wps[1].lon
+    await eng.tick(datetime(2026, 11, 8, 22, 0, 0, tzinfo=UTC))
+    assert eng.route.current.name == "open1"  # noqa: S101
+    assert eng.sched.state == SimState.MOORED  # noqa: S101

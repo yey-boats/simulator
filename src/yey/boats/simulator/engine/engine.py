@@ -129,11 +129,16 @@ class Engine:
 
         if (self.autopilot.state.mode == "route"
                 and self.route.distance_to_next(self.nav_state.lat, self.nav_state.lon) < 0.3):
-            wp_meta = self.route.current
-            self.sched.on_waypoint_arrival()
+            wp_meta = self.route.next_wp      # the waypoint just reached
             self.route.advance()
-            self.sys_.on_marina_arrival(wp_meta.refill_water, wp_meta.refill_fuel,
-                                        wp_meta.pump_out_bw)
+            if wp_meta.marina:
+                # Only a marina stop moors the boat. Open-water waypoints
+                # (autoroute legs, random passages: marina="") are passed
+                # through; mooring there would freeze the boat mid-sea until
+                # the next sailing window (review of #12).
+                self.sched.on_waypoint_arrival()
+                self.sys_.on_marina_arrival(wp_meta.refill_water, wp_meta.refill_fuel,
+                                            wp_meta.pump_out_bw)
             print(f"[engine] arrived {wp_meta.name}, next {self.route.next_wp.name}", flush=True)
 
         if self.sched.lookahead_due:
