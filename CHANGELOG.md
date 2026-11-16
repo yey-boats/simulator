@@ -13,7 +13,7 @@
   RB-BLIP-O-MATIC-4G radar (`sensors.radar.state|range|targetsTracked`,
   auto-range from AIS traffic), RB-CHILLY-WILLY fridge/freezer temperatures and
   RB-UMBILICAL-16 shore-power inlet (`electrical.shorePower.*`, unplugged: the
-  sim anchors). `steering.autopilot.target.headingMagnetic` now applies the
+  sim lies at anchor, also at a marina stop, and models no shore charging). `steering.autopilot.target.headingMagnetic` now applies the
   variation (was equal to true).
 - `signalk-plugin/`: new SIMULATOR-ONLY SignalK server plugin
   `signalk-yey-sim-autopilot` (plugin id `yey-sim-autopilot`). It registers PUT

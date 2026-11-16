@@ -869,7 +869,9 @@ def _equipment_values(nav: NavState, elec: ElecState, state: SimState,
         _v("environment.inside.freezer.temperature",      freezer_c + 273.15),
     ]
 
-    # Shore power: the sim never docks in a marina (it anchors), so unplugged.
+    # Shore power: unplugged. Even moored at a marina stop (#8) the sim lies at anchor
+    # (anchor light on) and the battery model has no shore charging, so a live shore
+    # supply would contradict it.
     out += [
         _v("electrical.shorePower.connected", False),
         _v("electrical.shorePower.voltage",   0.0),
