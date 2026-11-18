@@ -133,9 +133,9 @@ async def test_holding_course_heading_wanders_and_rudder_works():
 
     # Heading is turn-rate limited, so first let it slew from the start heading
     # onto the commanded course; then measure the steady-state wander.
-    for i in range(40):
+    for i in range(80):
         await eng.tick(now + timedelta(seconds=i))
-    now = now + timedelta(seconds=40)
+    now = now + timedelta(seconds=80)
 
     headings = []
     rudders = []
@@ -178,10 +178,10 @@ async def test_route_following_leg_heading_wanders_and_rudder_works():
 
     # Heading is turn-rate limited: settle onto the leg bearing first, then
     # measure the steady-state wander.
-    for i in range(40):
+    for i in range(80):
         await eng.tick(now + timedelta(seconds=i))
         eng.sched.state = SimState.MOTORED
-    now = now + timedelta(seconds=40)
+    now = now + timedelta(seconds=80)
 
     headings = []
     rudders = []
@@ -243,9 +243,9 @@ async def test_emitted_heading_wanders_and_rudder_nonzero_in_auto_hold():
 
     # Heading is turn-rate limited: settle onto the AP target first, then measure
     # the steady-state wander on the wire.
-    for i in range(40):
+    for i in range(80):
         await eng.tick(now + timedelta(seconds=i))
-    now = now + timedelta(seconds=40)
+    now = now + timedelta(seconds=80)
 
     emitted_hdg_rad = []
     emitted_rudder_rad = []

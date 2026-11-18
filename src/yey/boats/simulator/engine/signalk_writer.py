@@ -1298,16 +1298,28 @@ class SignalKWriter:
 
     async def _reconnect_ws(self, label: str = "reconnected") -> None:
         """Re-establish the WebSocket connection using the stored token."""
-        self._ws = None
+        await self.close()
         while True:
+            candidate = None
             try:
                 uri = (f"ws://{self._host}:{self._port}/signalk/v1/stream"
                        f"?subscribe=none&token={self._token}")
-                self._ws = await websockets.connect(uri)
-                await self._ws.recv()  # consume hello
+                candidate = await websockets.connect(uri)
+                await asyncio.wait_for(candidate.recv(), timeout=10)
+                self._ws = candidate
+                # Telemetry buffered during an outage describes old boat states.
+                # Resume with the next live tick instead of replaying that history.
+                while not self._queue.empty():
+                    self._queue.get_nowait()
                 print(f"[writer] WS {label}", flush=True)  # noqa: T201
                 return
+            except asyncio.CancelledError:
+                if candidate is not None:
+                    await candidate.close()
+                raise
             except Exception as exc:
+                if candidate is not None:
+                    await candidate.close()
                 print(f"[writer] WS connect failed: {exc!r}, retrying in 5s", flush=True)  # noqa: T201
                 await asyncio.sleep(5)
 
@@ -1416,5 +1428,6 @@ class SignalKWriter:
             )
 
     async def close(self) -> None:
-        if self._ws:
-            await self._ws.close()
+        ws, self._ws = self._ws, None
+        if ws is not None:
+            await ws.close()

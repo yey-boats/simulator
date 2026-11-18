@@ -42,10 +42,11 @@ def _normalise_angle(deg: float) -> float:
 
 
 # Max rate the boat can swing its heading. A tack/gybe (~90-115 deg) then slews
-# over ~12-15 s instead of snapping in a single tick — without this the emitted
+# over ~30-40 s instead of snapping in a single tick — without this the emitted
 # navigation.headingTrue (and apparent wind) jumps ~100 deg instantly when the
 # boat tacks upwind, which reads as a glitch / "two states" on the instruments.
-MAX_TURN_RATE_DEG_S = 8.0
+MAX_TURN_RATE_DEG_S = 3.0
+MAX_SPEED_CHANGE_KTS_S = 0.15
 
 
 def _slew_heading(cur_deg: float, target_deg: float, max_step_deg: float) -> float:
@@ -219,6 +220,12 @@ class Navigator:
         else:
             stw = self._polars.boat_speed(tws_kts, abs(_normalise_angle(twd_deg - hdg)))
             stw *= efficiency
+
+        if not moored:
+            # Boat momentum smooths polar cliffs (notably sailing through the
+            # no-go zone) and engine engagement. Berth states still stop exactly.
+            max_change = MAX_SPEED_CHANGE_KTS_S * max(0.0, dt_s)
+            stw = max(state.stw_kts - max_change, min(state.stw_kts + max_change, stw))
 
         twa = _normalise_angle(twd_deg - hdg)
         aws, awa = _apparent_wind(stw, hdg, tws_kts, twd_deg)

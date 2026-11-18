@@ -177,9 +177,15 @@ class Engine:
             self.sched.try_depart(now, twd, mean_tws)
 
         wp_brg = self.route.bearing_to_next(self.nav_state.lat, self.nav_state.lon)
-        stw_candidate = self.polars.boat_speed(tws, abs(self.nav_state.twa_deg))
-        self.sched.update_sailing_state(stw_candidate)
+        # Decide whether sailing is viable on its intended course. The current
+        # heading can be in irons mid-tack: using it alternated motor/sail each
+        # tick, with the motor steering back into the wind before the tack ended.
+        sail_hdg = self.nav.sail_heading(
+            self.nav_state.lat, self.nav_state.lon, wp_brg, twd, tws)
+        sail_twa = abs((twd - sail_hdg + 180) % 360 - 180)
         eff = polar_efficiency(wx.wave_height_m, tws)
+        stw_candidate = self.polars.boat_speed(tws, sail_twa) * eff
+        self.sched.update_sailing_state(stw_candidate)
         route_hdg = self.nav.route_heading(self.nav_state, wp_brg, tws, twd, self.sched.state)
         commanded_hdg = self.autopilot.effective_heading(
             route_heading_deg=route_hdg, current_heading_deg=self.nav_state.hdg_deg, twd_deg=twd)

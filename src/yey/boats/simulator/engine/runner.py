@@ -149,175 +149,179 @@ async def pipeline(settings: Settings, route, start_pos, report_status) -> None:
 
     chain = build_sink_chain(settings)
     print(f"[sim] opening sink chain (primary={settings.sink})...", flush=True)
-    await chain.open()
-    sk_sink = chain.active if isinstance(chain.active, SignalKSink) else None
-    writer = sk_sink.writer if sk_sink else None
+    try:
+        await chain.open()
+        sk_sink = chain.active if isinstance(chain.active, SignalKSink) else None
+        writer = sk_sink.writer if sk_sink else None
 
-    if start_pos is None:
-        env_pos = _env_start_pos()
-        if env_pos is not None:
-            start_pos = env_pos
-            print(f"[sim] start position from START_LAT/START_LON: "
-                  f"({env_pos[0]:.4f}, {env_pos[1]:.4f})", flush=True)
+        if start_pos is None:
+            env_pos = _env_start_pos()
+            if env_pos is not None:
+                start_pos = env_pos
+                print(f"[sim] start position from START_LAT/START_LON: "
+                      f"({env_pos[0]:.4f}, {env_pos[1]:.4f})", flush=True)
 
-    if start_pos is not None:
-        start_lat, start_lon = start_pos
-        idx, _ = route.resync_from_position(start_lat, start_lon)
-        start_hdg = route.bearing_to_next(start_lat, start_lon)
-        print(f"[sim] resuming from ({start_lat:.4f}, {start_lon:.4f}) -> leg {idx}", flush=True)
-    else:
-        resume = await writer.get_self_position() if writer is not None else None
-        if resume is not None:
-            start_lat, start_lon = resume
+        if start_pos is not None:
+            start_lat, start_lon = start_pos
             idx, _ = route.resync_from_position(start_lat, start_lon)
             start_hdg = route.bearing_to_next(start_lat, start_lon)
             print(f"[sim] resuming from ({start_lat:.4f}, {start_lon:.4f}) -> leg {idx}",
                   flush=True)
         else:
-            start_lat, start_lon = route.current.lat, route.current.lon
-            start_hdg = route.current.berth_heading
-            print(f"[sim] starting at origin {route.current.name}", flush=True)
+            resume = await writer.get_self_position() if writer is not None else None
+            if resume is not None:
+                start_lat, start_lon = resume
+                idx, _ = route.resync_from_position(start_lat, start_lon)
+                start_hdg = route.bearing_to_next(start_lat, start_lon)
+                print(f"[sim] resuming from ({start_lat:.4f}, {start_lon:.4f}) -> leg {idx}",
+                      flush=True)
+            else:
+                start_lat, start_lon = route.current.lat, route.current.lon
+                start_hdg = route.current.berth_heading
+                print(f"[sim] starting at origin {route.current.name}", flush=True)
 
-    if writer is not None:
-        try:
-            await writer.put_route_resource(ROUTE_UUID, _route_to_geojson(route))
-            next_index = (route.current_index + 1) % len(route.waypoints)
-            await writer.put_active_route(ROUTE_UUID, next_index)
-        except Exception as exc:
-            print(f"[sim] route resource upload failed (non-fatal): {exc!r}", flush=True)
-
-    start_state = NavState(lat=start_lat, lon=start_lon, hdg_deg=start_hdg,
-                           cog_deg=start_hdg, sog_kts=0, stw_kts=0, twa_deg=0,
-                           tws_kts=0, twd_deg=0, awa_deg=0, aws_kts=0,
-                           heel_deg=0, depth_m=10.0)
-
-    data_source = build_data_source(settings)
-
-    engine_ref: dict = {}
-
-    def get_pos() -> tuple[float, float]:
-        eng = engine_ref.get("engine")
-        if eng is None:
-            return (start_lat, start_lon)
-        return (eng.nav_state.lat, eng.nav_state.lon)
-
-    # AISStreamSource/SyntheticAISSource share a duck-typed interface (start(),
-    # get_contacts()) with no common base class; Any avoids a false mypy
-    # incompatible-assignment between the two branches.
-    ais_source: Any
-    if settings.aisstream_api_key:
-        ais_source = AISStreamSource(get_pos=get_pos, api_key=settings.aisstream_api_key)
-    else:
-        ais_source = SyntheticAISSource(get_pos=get_pos)
-
-    engine = Engine(route, polars, data_source, ais_source,
-                    start_state=start_state, grid=grid, data_dir=settings.data_dir,
-                    resume_route_after_s=settings.resume_route_after_s)
-    engine_ref["engine"] = engine
-
-    # One-slot handoff: autoroute_bg() computes the expanded waypoints in a
-    # worker thread and drops them here; drive() applies the swap at the TOP of
-    # its loop, before engine.tick(), where no tick is suspended. The swap must
-    # not land mid-tick — engine.tick() awaits between its reads of the route, so
-    # swapping during a tick would yield one logically-torn snapshot.
-    pending_route: dict = {}
-
-    async def _apply_pending_route():
-        item = pending_route.pop("item", None)
-        if item is None:
-            return
-        new_wps = item["wps"]
-        # Synchronous, atomic relative to a tick (no await between these two):
-        route.waypoints = new_wps
-        route.resync_from_position(engine.nav_state.lat, engine.nav_state.lon)
-        if item.get("persist"):
-            try:
-                route.save_expanded_route(autoroute_cache, autoroute_fp, autoroute_cfg_sig)
-            except OSError as exc:
-                print(f"[sim] autoroute cache write failed (non-fatal): {exc!r}", flush=True)
-        next_idx = (route.current_index + 1) % len(route.waypoints)  # snapshot before awaits
-        print(f"[sim] {item.get('label', 'route')}: applied route ({len(new_wps)} wp)",
-              flush=True)
         if writer is not None:
             try:
                 await writer.put_route_resource(ROUTE_UUID, _route_to_geojson(route))
-                await writer.put_active_route(ROUTE_UUID, next_idx)
-            except Exception as exc:  # noqa: BLE001
-                print(f"[sim] route re-upload failed (non-fatal): {exc!r}", flush=True)
+                next_index = (route.current_index + 1) % len(route.waypoints)
+                await writer.put_active_route(ROUTE_UUID, next_index)
+            except Exception as exc:
+                print(f"[sim] route resource upload failed (non-fatal): {exc!r}", flush=True)
 
-    async def drive():
-        while True:
-            await _apply_pending_route()   # between ticks: safe swap point
-            t0 = time.monotonic()
-            now = datetime.now(UTC)
-            snap = await engine.tick(now)
-            await chain.publish(snap)
-            # chain.active may change over the run (failover); recompute each tick.
-            connected = isinstance(chain.active, SignalKSink)
-            report_status((engine.nav_state.lat, engine.nav_state.lon), connected)
-            await asyncio.sleep(max(0, 1.0 - (time.monotonic() - t0)))
+        start_state = NavState(lat=start_lat, lon=start_lon, hdg_deg=start_hdg,
+                               cog_deg=start_hdg, sog_kts=0, stw_kts=0, twa_deg=0,
+                               tws_kts=0, twd_deg=0, awa_deg=0, aws_kts=0,
+                               heel_deg=0, depth_m=10.0)
 
-    async def autoroute_bg():
-        """Compute navigable legs off the startup path, in a worker thread against
-        a PRIVATE in-memory grid (no shared state with the live depth grid). The
-        result is handed to drive() which applies it between ticks. On any failure
-        (e.g. GEBCO 429) it keeps the planner legs and does not persist, so a
-        later boot retries."""
-        planner_snapshot = list(route.waypoints)
-        rgrid = GeoGrid(fetcher=_opentopo_fetch)  # private, in-memory
-        try:
-            new_wps = await asyncio.to_thread(
-                Route.expand_waypoints, planner_snapshot, rgrid, route_cfg)
-        except Exception as exc:  # noqa: BLE001
-            print(f"[sim] autoroute background failed (keeping planner legs): {exc!r}",
+        data_source = build_data_source(settings)
+
+        engine_ref: dict = {}
+
+        def get_pos() -> tuple[float, float]:
+            eng = engine_ref.get("engine")
+            if eng is None:
+                return (start_lat, start_lon)
+            return (eng.nav_state.lat, eng.nav_state.lon)
+
+        # AISStreamSource/SyntheticAISSource share a duck-typed interface (start(),
+        # get_contacts()) with no common base class; Any avoids a false mypy
+        # incompatible-assignment between the two branches.
+        ais_source: Any
+        if settings.aisstream_api_key:
+            ais_source = AISStreamSource(get_pos=get_pos, api_key=settings.aisstream_api_key)
+        else:
+            ais_source = SyntheticAISSource(get_pos=get_pos)
+
+        engine = Engine(route, polars, data_source, ais_source,
+                        start_state=start_state, grid=grid, data_dir=settings.data_dir,
+                        resume_route_after_s=settings.resume_route_after_s)
+        engine_ref["engine"] = engine
+
+        # One-slot handoff: autoroute_bg() computes the expanded waypoints in a
+        # worker thread and drops them here; drive() applies the swap at the TOP of
+        # its loop, before engine.tick(), where no tick is suspended. The swap must
+        # not land mid-tick — engine.tick() awaits between its reads of the route, so
+        # swapping during a tick would yield one logically-torn snapshot.
+        pending_route: dict = {}
+
+        async def _apply_pending_route():
+            item = pending_route.pop("item", None)
+            if item is None:
+                return
+            new_wps = item["wps"]
+            # Synchronous, atomic relative to a tick (no await between these two):
+            route.waypoints = new_wps
+            route.resync_from_position(engine.nav_state.lat, engine.nav_state.lon)
+            if item.get("persist"):
+                try:
+                    route.save_expanded_route(autoroute_cache, autoroute_fp, autoroute_cfg_sig)
+                except OSError as exc:
+                    print(f"[sim] autoroute cache write failed (non-fatal): {exc!r}", flush=True)
+            next_idx = (route.current_index + 1) % len(route.waypoints)  # snapshot before awaits
+            print(f"[sim] {item.get('label', 'route')}: applied route ({len(new_wps)} wp)",
                   flush=True)
-            return
-        pending_route["item"] = {"wps": new_wps, "persist": True, "label": "autoroute"}
+            if writer is not None:
+                try:
+                    await writer.put_route_resource(ROUTE_UUID, _route_to_geojson(route))
+                    await writer.put_active_route(ROUTE_UUID, next_idx)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"[sim] route re-upload failed (non-fatal): {exc!r}", flush=True)
 
-    async def passage_loop():
-        """Random-passage demo: lay a fresh PASSAGE_MIN..MAX nM autorouted leg,
-        and on arrival lay the next. The passage is computed in a worker thread
-        against a PRIVATE grid (honours GEOGRID_API_URL), handed to drive() which
-        swaps it in between ticks and pushes it to SignalK."""
-        from yey.boats.simulator.engine.passage import distance_nm, make_passage
-        rgrid = GeoGrid(fetcher=_opentopo_fetch)   # private; uses GEOGRID_API_URL
-        rng = random.Random()
-        dest: tuple[float, float] | None = None
-        while True:
-            pos = (engine.nav_state.lat, engine.nav_state.lon)
-            near = (dest is not None
-                   and distance_nm(pos[0], pos[1], dest[0], dest[1]) <= passage_arrival_nm)
-            if (dest is None or near) and "item" not in pending_route:
-                wps = await asyncio.to_thread(
-                    make_passage, pos[0], pos[1], rgrid, route_cfg,
-                    passage_min_nm, passage_max_nm, rng)
-                if wps:
-                    dest = (wps[-1].lat, wps[-1].lon)
-                    leg_nm = distance_nm(pos[0], pos[1], dest[0], dest[1])
-                    pending_route["item"] = {"wps": wps, "persist": False, "label": "passage"}
-                    print(f"[sim] passage: new {leg_nm:.0f} nM leg to "
-                          f"({dest[0]:.3f}, {dest[1]:.3f}), {len(wps)} wp", flush=True)
-                else:
-                    print("[sim] passage: no clear destination found; retrying", flush=True)
-            await asyncio.sleep(passage_poll_s)
+        async def drive():
+            while True:
+                await _apply_pending_route()   # between ticks: safe swap point
+                t0 = time.monotonic()
+                now = datetime.now(UTC)
+                snap = await engine.tick(now)
+                await chain.publish(snap)
+                # chain.active may change over the run (failover); recompute each tick.
+                connected = isinstance(chain.active, SignalKSink)
+                report_status((engine.nav_state.lat, engine.nav_state.lon), connected)
+                await asyncio.sleep(max(0, 1.0 - (time.monotonic() - t0)))
 
-    tasks = [drive(), ais_source.start(), grid.fetch_loop()]
-    if passage_mode:
-        tasks.append(passage_loop())
-    elif autoroute_needed:
-        tasks.append(autoroute_bg())
-    if writer is not None:
-        # writer.token is only None before connect() succeeds; by this point
-        # the writer has already connected (see caller), so it's always set.
-        assert writer.token is not None
-        cmd_src = SignalKCommandSource(
-            settings.signalk_host, settings.signalk_port, writer.token,
-            EngineCommandSink(engine), lambda: (0.0, 0.0))
-        tasks += [writer.flush_loop(),
-                  writer.metadata_loop(extra_load_names=META_LOADS, interval=2.0),
-                  cmd_src.run()]
+        async def autoroute_bg():
+            """Compute navigable legs off the startup path, in a worker thread against
+            a PRIVATE in-memory grid (no shared state with the live depth grid). The
+            result is handed to drive() which applies it between ticks. On any failure
+            (e.g. GEBCO 429) it keeps the planner legs and does not persist, so a
+            later boot retries."""
+            planner_snapshot = list(route.waypoints)
+            rgrid = GeoGrid(fetcher=_opentopo_fetch)  # private, in-memory
+            try:
+                new_wps = await asyncio.to_thread(
+                    Route.expand_waypoints, planner_snapshot, rgrid, route_cfg)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[sim] autoroute background failed (keeping planner legs): {exc!r}",
+                      flush=True)
+                return
+            pending_route["item"] = {"wps": new_wps, "persist": True, "label": "autoroute"}
 
-    await run_together(tasks)
+        async def passage_loop():
+            """Random-passage demo: lay a fresh PASSAGE_MIN..MAX nM autorouted leg,
+            and on arrival lay the next. The passage is computed in a worker thread
+            against a PRIVATE grid (honours GEOGRID_API_URL), handed to drive() which
+            swaps it in between ticks and pushes it to SignalK."""
+            from yey.boats.simulator.engine.passage import distance_nm, make_passage
+            rgrid = GeoGrid(fetcher=_opentopo_fetch)   # private; uses GEOGRID_API_URL
+            rng = random.Random()
+            dest: tuple[float, float] | None = None
+            while True:
+                pos = (engine.nav_state.lat, engine.nav_state.lon)
+                near = (dest is not None
+                       and distance_nm(pos[0], pos[1], dest[0], dest[1]) <= passage_arrival_nm)
+                if (dest is None or near) and "item" not in pending_route:
+                    wps = await asyncio.to_thread(
+                        make_passage, pos[0], pos[1], rgrid, route_cfg,
+                        passage_min_nm, passage_max_nm, rng)
+                    if wps:
+                        dest = (wps[-1].lat, wps[-1].lon)
+                        leg_nm = distance_nm(pos[0], pos[1], dest[0], dest[1])
+                        pending_route["item"] = {"wps": wps, "persist": False, "label": "passage"}
+                        print(f"[sim] passage: new {leg_nm:.0f} nM leg to "
+                              f"({dest[0]:.3f}, {dest[1]:.3f}), {len(wps)} wp", flush=True)
+                    else:
+                        print("[sim] passage: no clear destination found; retrying", flush=True)
+                await asyncio.sleep(passage_poll_s)
+
+        tasks = [drive(), ais_source.start(), grid.fetch_loop()]
+        if passage_mode:
+            tasks.append(passage_loop())
+        elif autoroute_needed:
+            tasks.append(autoroute_bg())
+        if writer is not None:
+            # writer.token is only None before connect() succeeds; by this point
+            # the writer has already connected (see caller), so it's always set.
+            assert writer.token is not None
+            cmd_src = SignalKCommandSource(
+                settings.signalk_host, settings.signalk_port, writer.token,
+                EngineCommandSink(engine), lambda: (0.0, 0.0))
+            tasks += [writer.flush_loop(),
+                      writer.metadata_loop(extra_load_names=META_LOADS, interval=2.0),
+                      cmd_src.run()]
+
+        await run_together(tasks)
+    finally:
+        await chain.close()
 
 
 async def run_together(coros) -> None:
