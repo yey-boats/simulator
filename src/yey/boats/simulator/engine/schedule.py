@@ -58,7 +58,9 @@ class Schedule:
             return self.state
         if stw_kts < 1.8:
             self.state = SimState.MOTORED
-        else:
+        elif stw_kts > 2.2:
+            # Separate engage/disengage thresholds keep gusts around the
+            # crossover from toggling propulsion every second.
             self.state = SimState.SAILING
         return self.state
 

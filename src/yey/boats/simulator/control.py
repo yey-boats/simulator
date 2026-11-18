@@ -59,22 +59,34 @@ class SimController:
 
     # --- supervisor loop -------------------------------------------------
     async def run_forever(self) -> None:
-        while True:
-            self._restart.clear()
-            self._task = asyncio.create_task(self._run_once())
-            restart_wait = asyncio.create_task(self._restart.wait())
-            done, _ = await asyncio.wait(
-                {self._task, restart_wait}, return_when=asyncio.FIRST_COMPLETED)
-            restart_wait.cancel()
-            if self._task in done:           # pipeline exited on its own (error)
-                exc = self._task.exception()
-                if exc is not None:
-                    self._last_error = repr(exc)
-                await asyncio.sleep(1.0)      # brief backoff, then relaunch
-            else:                            # restart requested
+        try:
+            while True:
+                self._restart.clear()
+                self._task = asyncio.create_task(self._run_once())
+                restart_wait = asyncio.create_task(self._restart.wait())
+                try:
+                    done, _ = await asyncio.wait(
+                        {self._task, restart_wait}, return_when=asyncio.FIRST_COMPLETED)
+                finally:
+                    restart_wait.cancel()
+                    await asyncio.gather(restart_wait, return_exceptions=True)
+                if self._task in done:       # pipeline exited on its own
+                    exc = self._task.exception()
+                    if exc is not None:
+                        self._last_error = repr(exc)
+                    self._connected = False
+                    await asyncio.sleep(1.0)
+                else:                        # live-apply: retire before replacing
+                    self._task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await self._task
+        finally:
+            # Cancelling the supervisor must also retire the engine/writer.
+            # asyncio.wait does not propagate cancellation to its children.
+            if self._task is not None:
                 self._task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await self._task
+                await asyncio.gather(self._task, return_exceptions=True)
+            self._connected = False
 
     async def _run_once(self) -> None:
         await self._pipeline(self._settings, self._route,
