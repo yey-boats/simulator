@@ -187,3 +187,27 @@ async def test_pipeline_cancel_closes_sink_after_driver_stops(monkeypatch, tmp_p
     with pytest.raises(asyncio.CancelledError):
         await task
     assert chain.closed
+
+
+async def test_manual_heading_into_the_wind_motors_instead_of_sitting_in_irons(monkeypatch):
+    """#23 (regression from #21): the motor/sail decision used the route course while
+    the autopilot held a manual heading. Autopilot holds 280 into 12 kn from 280 while
+    the route leg (190) is sailable: the boat must motor on 280, not sit SAILING at
+    STW 0 until the route resumes (or forever with RESUME_ROUTE_AFTER_S=0)."""
+    engine = _engine()
+    engine.sched.state = SimState.SAILING
+    engine.nav_state.hdg_deg = 280
+    engine.nav_state.stw_kts = 0
+    monkeypatch.setattr(engine.route, 'bearing_to_next', lambda *_: 190.0)
+    monkeypatch.setattr(engine.route, 'distance_to_next', lambda *_: 100.0)
+    monkeypatch.setattr(type(engine._data), 'get_weather', fixed_weather)
+    from yey.boats.simulator.engine.weather import WeatherPoint
+    monkeypatch.setattr(WeatherPoint, 'sample', lambda _: (12.0, 280.0))
+    engine.submit_command("set_heading", 280.0)
+    now = datetime(2026, 6, 14, 10, tzinfo=UTC)
+    for i in range(240):
+        snap = await engine.tick(now + timedelta(seconds=i))
+    assert engine.autopilot.state.mode == "auto"
+    assert abs((snap.nav.hdg_deg - 280 + 180) % 360 - 180) < 15, "holds the manual heading"
+    assert snap.state == SimState.MOTORED, snap.state
+    assert snap.nav.stw_kts > 3.0, snap.nav.stw_kts
