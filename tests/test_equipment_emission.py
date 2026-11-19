@@ -47,6 +47,7 @@ def _elec(loads=None):
     e.voltage, e.current_a, e.soc = 13.6, 5.0, 0.9
     e.solar_w, e.alternator_w, e.genset_w, e.net_w = 100.0, 0.0, 0.0, 0.0
     e.inverter_state, e.genset_state, e.genset_rpm = "standby", "off", 0.0
+    e.fridge_phase = 0.5
     return e
 
 
@@ -255,3 +256,38 @@ async def test_sink_forwards_ais_target_ranges():
     await sink.publish(snap)
     (rng,) = w.kwargs["ais_target_ranges_m"]
     assert rng == pytest.approx(NM, rel=0.01)  # noqa: S101  1' of latitude = 1 nM
+
+
+def test_fridge_temperature_follows_the_compressor_not_the_clock():
+    """#24: the sawtooth phase came from utc % 120 while the compressor toggles on
+    its own 120 s timer, so the reading jumped 1.5 K at each 2-minute UTC boundary.
+    It now follows the compressor's own cycle (ElecState.fridge_phase)."""
+    e = _elec({"fridge": 60.0})
+    e.fridge_phase = 0.4
+    before = _build_vessel_delta(_nav(), e, _sys(), _lights(), _wx(), SimState.SAILING,
+                                 datetime(2026, 6, 14, 10, 1, 59, 900000, tzinfo=UTC), _TEMPS)
+    after = _build_vessel_delta(_nav(), e, _sys(), _lights(), _wx(), SimState.SAILING,
+                                datetime(2026, 6, 14, 10, 2, 0, 100000, tzinfo=UTC), _TEMPS)
+    val = lambda d, k: {v["path"]: v["value"] for v in d["updates"][0]["values"]}[k]  # noqa: E731
+    for k in ("environment.inside.refrigerator.temperature",
+              "environment.inside.freezer.temperature"):
+        assert val(before, k) == val(after, k)  # noqa: S101
+    # continuous at the compressor's own toggle: end of a pull-down == start of a warm-up
+    on_end = _elec({"fridge": 60.0})
+    on_end.fridge_phase = 1.0
+    off_start = _elec({"fridge": 0.0})
+    off_start.fridge_phase = 0.0
+    t = "environment.inside.refrigerator.temperature"
+    assert abs(_paths(elec=on_end)[t] - _paths(elec=off_start)[t]) < 1e-9  # noqa: S101
+
+
+def test_electrical_reports_the_compressor_phase():
+    from yey.boats.simulator.engine.electrical import Electrical  # type: ignore[import]
+    el = Electrical()
+    phases = []
+    for _ in range(240):
+        st = el.tick(1.0, SimState.SAILING, 45.0, 13.0, 0.0,
+                     datetime(2026, 6, 14, 10, tzinfo=UTC))
+        phases.append(st.fridge_phase)
+    assert all(0.0 <= ph <= 1.0 for ph in phases)  # noqa: S101
+    assert min(phases) < 0.05 and max(phases) > 0.95  # noqa: S101

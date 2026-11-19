@@ -127,3 +127,48 @@ def test_aisstream_api_key_file_missing_raises_clear_error(monkeypatch, tmp_path
     monkeypatch.setenv("AISSTREAM_API_KEY_FILE", str(missing))
     with pytest.raises(RuntimeError, match="AISSTREAM_API_KEY_FILE"):
         Settings.from_env()
+
+
+
+# ── #24: empty / undecodable secret files, and no file secrets in config.json ──
+
+def test_empty_secret_file_is_an_error(monkeypatch, tmp_path):
+    f = tmp_path / "pw"
+    f.write_text("  \n")
+    monkeypatch.setenv("SIGNALK_PASSWORD_FILE", str(f))
+    with pytest.raises(RuntimeError, match="empty"):
+        Settings.from_env()
+
+
+def test_non_utf8_secret_file_is_a_clear_error(monkeypatch, tmp_path):
+    f = tmp_path / "pw"
+    f.write_bytes(b"\xff\xfe\x00bad")
+    monkeypatch.setenv("SIGNALK_PASSWORD_FILE", str(f))
+    with pytest.raises(RuntimeError, match="SIGNALK_PASSWORD_FILE"):
+        Settings.from_env()
+
+
+def test_secrets_from_files_are_not_persisted(monkeypatch, tmp_path):
+    import json as _json
+    pw = tmp_path / "pw"
+    pw.write_text("s3cr3t-from-file\n")
+    key = tmp_path / "key"
+    key.write_text("ais-from-file\n")
+    monkeypatch.setenv("SIGNALK_PASSWORD_FILE", str(pw))
+    monkeypatch.setenv("AISSTREAM_API_KEY_FILE", str(key))
+    s = Settings.from_env()
+    s.sink = "stdout"                          # any web-admin change triggers save()
+    cfg = tmp_path / "config.json"
+    s.save(cfg)
+    text = cfg.read_text()
+    assert "s3cr3t-from-file" not in text and "ais-from-file" not in text  # noqa: S101
+    saved = _json.loads(text)
+    assert saved["sink"] == "stdout"  # noqa: S101
+    assert "signalk_password" not in saved and "aisstream_api_key" not in saved  # noqa: S101
+    # a plain env/default secret is still persisted as before
+    monkeypatch.delenv("SIGNALK_PASSWORD_FILE")
+    monkeypatch.delenv("AISSTREAM_API_KEY_FILE")
+    monkeypatch.setenv("SIGNALK_PASSWORD", "plain")
+    s2 = Settings.from_env()
+    s2.save(cfg)
+    assert _json.loads(cfg.read_text())["signalk_password"] == "plain"  # noqa: S101
