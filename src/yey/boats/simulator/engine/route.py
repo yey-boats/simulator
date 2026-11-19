@@ -136,17 +136,43 @@ class Route:
         return best_i, near_d
 
     def to_waypoint_dicts(self) -> list[dict]:
-        return [{"name": w.name, "lat": w.lat, "lon": w.lon} for w in self.waypoints]
+        """name/lat/lon per waypoint, plus the marina stop metadata where there is
+        one (#22: the web admin saves this list back; dropping it stopped mooring)."""
+        out = []
+        for w in self.waypoints:
+            d: dict = {"name": w.name, "lat": w.lat, "lon": w.lon}
+            if w.marina:
+                d.update(marina=w.marina, berth_heading=w.berth_heading,
+                         refill_water=w.refill_water, refill_fuel=w.refill_fuel,
+                         pump_out_bw=w.pump_out_bw)
+            out.append(d)
+        return out
 
     @classmethod
     def from_waypoint_dicts(cls, wps: list[dict]) -> Route:
+        """Waypoints from dicts (web admin, route.json, GeoJSON/KMZ import). Marina
+        metadata is kept when given; otherwise taken from the bundled marinas by
+        waypoint name (as Route.load does for the KMZ). A route with no marina stop
+        at all moors at its last waypoint, so the boat still rests once per loop
+        instead of sailing through the night (#22; only marina stops moor, #12)."""
+        from yey.boats.simulator import resources
         from yey.boats.simulator.routeio import validate_waypoints
         valid = validate_waypoints(wps)
-        objs = [Waypoint(name=w["name"], lat=w["lat"], lon=w["lon"],
-                         marina="", berth_heading=0.0,
-                         refill_water=False, refill_fuel=False,
-                         pump_out_bw=False)
-                for w in valid]
+        try:
+            known = {m["name"]: m for m in json.loads(resources.marinas_json().read_text())}
+        except (OSError, ValueError):
+            known = {}
+        objs = []
+        for w in valid:
+            m = w if w.get("marina") else known.get(w["name"], {})
+            objs.append(Waypoint(name=w["name"], lat=w["lat"], lon=w["lon"],
+                                 marina=str(m.get("marina", "")),
+                                 berth_heading=float(m.get("berth_heading", 0.0)),
+                                 refill_water=bool(m.get("refill_water", False)),
+                                 refill_fuel=bool(m.get("refill_fuel", False)),
+                                 pump_out_bw=bool(m.get("pump_out_bw", False))))
+        if objs and not any(o.marina for o in objs):
+            objs[-1].marina = objs[-1].name
         return cls(waypoints=objs)
 
     @staticmethod

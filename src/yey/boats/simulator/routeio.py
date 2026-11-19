@@ -13,6 +13,9 @@ class WaypointError(ValueError):
     """Raised when waypoint data is structurally invalid."""
 
 
+MARINA_FLAGS = ("refill_water", "refill_fuel", "pump_out_bw")
+
+
 def validate_waypoints(wps: list[dict]) -> list[dict]:
     if not isinstance(wps, list) or len(wps) < 2:
         raise WaypointError("route needs at least 2 waypoints")
@@ -27,7 +30,18 @@ def validate_waypoints(wps: list[dict]) -> list[dict]:
             raise WaypointError(f"waypoint {i}: lat {lat} out of range")
         if not (-180.0 <= lon <= 180.0):
             raise WaypointError(f"waypoint {i}: lon {lon} out of range")
-        out.append({"name": str(w.get("name") or f"WP{i+1}"), "lat": lat, "lon": lon})
+        d: dict = {"name": str(w.get("name") or f"WP{i+1}"), "lat": lat, "lon": lon}
+        # Marina stop metadata (#22): only a waypoint with a marina moors the boat
+        # (#12), so a web-admin save must carry it through, coerced like the rest.
+        if w.get("marina"):
+            d["marina"] = str(w["marina"])
+            try:
+                d["berth_heading"] = float(w.get("berth_heading", 0.0)) % 360.0
+            except (TypeError, ValueError) as exc:
+                raise WaypointError(f"waypoint {i}: invalid berth_heading") from exc
+            for k in MARINA_FLAGS:
+                d[k] = bool(w.get(k, False))
+        out.append(d)
     return out
 
 
