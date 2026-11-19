@@ -177,11 +177,23 @@ class Engine:
             self.sched.try_depart(now, twd, mean_tws)
 
         wp_brg = self.route.bearing_to_next(self.nav_state.lat, self.nav_state.lon)
-        # Decide whether sailing is viable on its intended course. The current
-        # heading can be in irons mid-tack: using it alternated motor/sail each
-        # tick, with the motor steering back into the wind before the tack ended.
-        sail_hdg = self.nav.sail_heading(
-            self.nav_state.lat, self.nav_state.lon, wp_brg, twd, tws)
+        # Decide whether sailing is viable on the heading the boat will actually
+        # steer. Following the route, that is its intended course: the current
+        # heading can be in irons mid-tack, and using it alternated motor/sail each
+        # tick with the motor steering back into the wind before the tack ended (#21).
+        # While the autopilot holds a manual heading (auto, or a wind angle) it is
+        # that heading, and with the autopilot off the present one: judging those on
+        # the route course left the boat SAILING head to wind at STW 0 (#23).
+        ap = self.autopilot.state
+        if ap.engaged and ap.mode in ("auto", "wind"):
+            sail_hdg = self.autopilot.effective_heading(
+                route_heading_deg=wp_brg, current_heading_deg=self.nav_state.hdg_deg,
+                twd_deg=twd)
+        elif not ap.engaged or ap.mode == "standby":
+            sail_hdg = self.nav_state.hdg_deg
+        else:
+            sail_hdg = self.nav.sail_heading(
+                self.nav_state.lat, self.nav_state.lon, wp_brg, twd, tws)
         sail_twa = abs((twd - sail_hdg + 180) % 360 - 180)
         eff = polar_efficiency(wx.wave_height_m, tws)
         stw_candidate = self.polars.boat_speed(tws, sail_twa) * eff
