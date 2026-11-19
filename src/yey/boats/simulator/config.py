@@ -24,11 +24,20 @@ def _secret_from_env(var_name: str, default: str | None = None) -> str | None:
     file_path = os.environ.get(f"{var_name}_FILE")
     if file_path:
         try:
-            return Path(file_path).read_text().strip()
+            value = Path(file_path).read_text(encoding="utf-8").strip()
         except OSError as exc:
             raise RuntimeError(
                 f"{var_name}_FILE={file_path!r} could not be read: {exc}"
             ) from exc
+        except UnicodeDecodeError as exc:
+            raise RuntimeError(
+                f"{var_name}_FILE={file_path!r} is not UTF-8 text"
+            ) from exc
+        if not value:
+            # An empty secret would silently override the other sources and then
+            # fail the login (#24): refuse it at startup instead.
+            raise RuntimeError(f"{var_name}_FILE={file_path!r}: secret file is empty")
+        return value
     return os.environ.get(var_name, default)
 
 # Boat vertical geometry (Beneteau O45): keel bottom below the waterline, and
@@ -60,6 +69,9 @@ class Settings:
     # Seconds after the last manual autopilot override before the navigator
     # re-engages route mode (0 = never). See engine/navigator.py RouteResume.
     resume_route_after_s: float = DEFAULT_RESUME_ROUTE_AFTER_S
+    # Settings resolved from a *_FILE secret this run: never written to config.json
+    # (they come from the mounted file every start; #24).
+    secret_file_keys: frozenset = field(default_factory=frozenset, repr=False, compare=False)
 
     _PERSIST_KEYS = ("signalk_host", "signalk_port", "signalk_username",
                      "signalk_password", "aisstream_api_key", "sink",
@@ -88,7 +100,8 @@ class Settings:
     def save(self, path) -> None:
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(self.to_dict(), indent=2))
+        d = {k: v for k, v in self.to_dict().items() if k not in self.secret_file_keys}
+        p.write_text(json.dumps(d, indent=2))
 
     @classmethod
     def from_file(cls, path) -> Settings:
@@ -125,6 +138,10 @@ class Settings:
         for k, v in env_map.items():
             if v is not None:
                 setattr(base, k, v)
+        base.secret_file_keys = frozenset(
+            k for k, var in (("signalk_password", "SIGNALK_PASSWORD"),
+                             ("aisstream_api_key", "AISSTREAM_API_KEY"))
+            if os.environ.get(f"{var}_FILE"))
         for key, val in overrides.items():
             if val is not None and hasattr(base, key):
                 setattr(base, key, val)

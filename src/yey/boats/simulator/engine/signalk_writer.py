@@ -859,8 +859,10 @@ def _equipment_values(nav: NavState, elec: ElecState, state: SimState,
         ]
 
     # Fridge/freezer: thermostat sawtooth over the compressor's 2-min half-cycle
-    # (pulls down while the fridge load is drawing, warms while it rests).
-    phase = (utc_now.timestamp() % 120.0) / 120.0
+    # (pulls down while the fridge load is drawing, warms while it rests). The phase
+    # is the compressor's own (it toggles on a timer from engine start, not on UTC
+    # minutes), so the reading is continuous across each toggle (#24).
+    phase = min(1.0, max(0.0, float(getattr(elec, "fridge_phase", 0.0))))
     compressor_on = elec.loads.get("fridge", 0.0) > 0.0
     fridge_c = 5.5 - 1.5 * phase if compressor_on else 4.0 + 1.5 * phase
     freezer_c = -18.0 - 1.0 * phase if compressor_on else -19.0 + 1.0 * phase

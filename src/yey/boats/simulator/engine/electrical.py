@@ -35,6 +35,9 @@ class ElecState:
     genset_rpm: float
     loads: dict[str, float]
     net_w: float
+    # Position in the fridge compressor's current 120 s half-cycle, 0..1 (the
+    # thermostat sawtooth the SignalK writer reports follows this, #24).
+    fridge_phase: float = 0.0
 
     @property
     def capacity_remaining_wh(self) -> float:
@@ -79,6 +82,7 @@ class Electrical:
             genset_state=self._genset_state,
             genset_rpm=50.0 if self._genset_state == "running" else 0.0,
             loads=loads, net_w=net_w,
+            fridge_phase=min(1.0, max(0.0, self._fridge_timer / 120.0)),
         )
 
     # ── solar ─────────────────────────────────────────────────────────────────
