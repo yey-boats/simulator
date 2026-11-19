@@ -65,7 +65,14 @@ async def test_route_put_and_get(aiohttp_client, tmp_path):
     r = await cli.put("/api/route", json={"waypoints": wps})
     assert r.status == 200
     g = await (await cli.get("/api/route")).json()
-    assert g["waypoints"] == wps
+    assert [{k: w[k] for k in ("name", "lat", "lon")} for w in g["waypoints"]] == wps
+    # #22: a route without marina info moors at its last waypoint, and GET shows it
+    assert [w.get("marina", "") for w in g["waypoints"]] == ["", "B"]
+    # ...and a PUT of what GET returned (the web admin's save) keeps it
+    r = await cli.put("/api/route", json={"waypoints": g["waypoints"]})
+    assert r.status == 200
+    g2 = await (await cli.get("/api/route")).json()
+    assert g2["waypoints"] == g["waypoints"]
 
 
 async def test_route_put_rejects_one_point(aiohttp_client, tmp_path):

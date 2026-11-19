@@ -12,7 +12,18 @@ export type Config = {
   resume_route_after_s: number;
 };
 
-export type Waypoint = { name: string; lat: number; lon: number };
+// Marina stop metadata rides along (#22): only a waypoint with a marina moors the
+// boat, so edits spread the waypoint ({...w}) and must not drop these fields.
+export type Waypoint = {
+  name: string;
+  lat: number;
+  lon: number;
+  marina?: string;
+  berth_heading?: number;
+  refill_water?: boolean;
+  refill_fuel?: boolean;
+  pump_out_bw?: boolean;
+};
 
 export type Status = {
   running: boolean;
